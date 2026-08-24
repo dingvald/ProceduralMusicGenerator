@@ -1,0 +1,20 @@
+# Premake-generated build output
+build/
+bin/
+obj/
+
+# Visual Studio
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.vcproj
+.vs/
+*.user
+*.suo
+*.ilk
+*.pdb
+
+# OS
+.DS_Store
+Thumbs.db

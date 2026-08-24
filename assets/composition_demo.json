@@ -1,0 +1,62 @@
+{
+  "sampleRate": 48000,
+  "tempo": { "bpm": 120, "beatsPerBar": 4 },
+  "key": { "root": "C", "scale": "minor_pentatonic" },
+  "startPattern": "pattern_a",
+  "instruments": [
+    {
+      "id": "lead_synth",
+      "type": "synth",
+      "waveform": "saw",
+      "gain": 0.35,
+      "envelope": { "attack": 0.01, "decay": 0.12, "sustain": 0.6, "release": 0.25 }
+    },
+    {
+      "id": "kick",
+      "type": "sample",
+      "file": "samples/kick.wav",
+      "gain": 0.9
+    }
+  ],
+  "patterns": [
+    {
+      "id": "pattern_a",
+      "lengthBars": 1,
+      "steps": [
+        { "beat": 0.0, "instrument": "kick", "velocity": 1.0 },
+        { "beat": 0.0, "instrument": "lead_synth", "degree": 0, "velocity": 0.8, "gate": 0.5 },
+        { "beat": 1.5, "instrument": "lead_synth", "degree": 2, "velocity": 0.7, "gate": 0.4 },
+        { "beat": 2.0, "instrument": "kick", "velocity": 1.0 },
+        { "beat": 3.0, "instrument": "lead_synth", "degree": 4, "velocity": 0.9, "gate": 0.5 }
+      ]
+    },
+    {
+      "id": "pattern_b",
+      "lengthBars": 1,
+      "steps": [
+        { "beat": 0.0, "instrument": "kick", "velocity": 1.0 },
+        { "beat": 0.5, "instrument": "lead_synth", "degree": 3, "velocity": 0.6, "gate": 0.3 },
+        { "beat": 2.5, "instrument": "lead_synth", "degree": 5, "velocity": 0.8, "gate": 0.5 }
+      ]
+    }
+  ],
+  "variationRules": [
+    {
+      "id": "swap_pattern_each_bar",
+      "scope": "perBar",
+      "options": [
+        { "type": "swapPattern", "pattern": "pattern_b", "weight": 0.3 },
+        { "type": "swapPattern", "pattern": "pattern_a", "weight": 0.5 },
+        { "type": "noOp", "weight": 0.2 }
+      ]
+    },
+    {
+      "id": "mute_kick_occasionally",
+      "scope": "perBar",
+      "options": [
+        { "type": "setTrackMuted", "track": "kick", "muted": true, "weight": 0.15 },
+        { "type": "setTrackMuted", "track": "kick", "muted": false, "weight": 0.85 }
+      ]
+    }
+  ]
+}
