@@ -61,6 +61,16 @@ double Oscillator::BandlimitedPulse(double phaseIncrement, double duty) const {
     return value;
 }
 
+// 15-bit Fibonacci LFSR with taps at bit 0 and bit 1 (NES APU noise
+// channel "mode 0" / long sequence). Shifting right by one bit each clock
+// and feeding the XOR of the two low bits back into bit 14 produces a
+// pseudo-random bitstream with a 32767-sample period before repeating.
+void Oscillator::ShiftLfsr() {
+    unsigned feedback = (m_lfsrState ^ (m_lfsrState >> 1)) & 1u;
+    m_lfsrState = static_cast<uint16_t>((m_lfsrState >> 1) | (feedback << 14));
+    m_noiseOutput = (m_lfsrState & 1u) ? 1.0 : -1.0;
+}
+
 float Oscillator::NextSample() {
     double phaseIncrement = static_cast<double>(m_frequency) / static_cast<double>(m_sampleRate);
 
@@ -95,13 +105,22 @@ float Oscillator::NextSample() {
             value = static_cast<float>(triangle);
             break;
         }
+        case Waveform::Noise:
+            value = static_cast<float>(m_noiseOutput); // held until the next LFSR clock, below
+            break;
     }
 
     m_phase += phaseIncrement;
     if (m_phase >= 1.0) {
         m_phase -= std::floor(m_phase);
+        if (m_waveform == Waveform::Noise) {
+            ShiftLfsr();
+        }
     } else if (m_phase < 0.0) {
         m_phase -= std::floor(m_phase);
+        if (m_waveform == Waveform::Noise) {
+            ShiftLfsr();
+        }
     }
 
     return value;

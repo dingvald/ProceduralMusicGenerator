@@ -1,3 +1,5 @@
+#include <vector>
+
 #include "doctest/doctest.h"
 #include "engine/Oscillator.h"
 
@@ -5,7 +7,7 @@ using namespace pmg;
 
 TEST_CASE("Oscillator output stays within [-1, 1] for all waveforms") {
     const uint32_t sampleRate = 48000;
-    Waveform waveforms[] = {Waveform::Sine, Waveform::Saw, Waveform::Square, Waveform::Triangle};
+    Waveform waveforms[] = {Waveform::Sine, Waveform::Saw, Waveform::Square, Waveform::Triangle, Waveform::Noise};
 
     for (Waveform waveform : waveforms) {
         Oscillator osc;
@@ -104,4 +106,101 @@ TEST_CASE("Oscillator Triangle ignores duty cycle and stays symmetric") {
     for (uint32_t i = 0; i < sampleRate; ++i) {
         CHECK(narrowDuty.NextSample() == doctest::Approx(defaultDuty.NextSample()).epsilon(0.001));
     }
+}
+
+TEST_CASE("Oscillator Noise output is always exactly +1 or -1") {
+    const uint32_t sampleRate = 48000;
+    Oscillator osc;
+    osc.SetSampleRate(sampleRate);
+    osc.SetFrequency(1000.0f);
+    osc.SetWaveform(Waveform::Noise);
+
+    for (uint32_t i = 0; i < sampleRate; ++i) {
+        float sample = osc.NextSample();
+        CHECK((sample == doctest::Approx(1.0f) || sample == doctest::Approx(-1.0f)));
+    }
+}
+
+TEST_CASE("Oscillator Noise output is not degenerate: it visits both +1 and -1") {
+    const uint32_t sampleRate = 48000;
+    Oscillator osc;
+    osc.SetSampleRate(sampleRate);
+    osc.SetFrequency(1000.0f);
+    osc.SetWaveform(Waveform::Noise);
+
+    bool sawPositive = false;
+    bool sawNegative = false;
+    for (uint32_t i = 0; i < sampleRate; ++i) {
+        float sample = osc.NextSample();
+        if (sample > 0.0f) sawPositive = true;
+        if (sample < 0.0f) sawNegative = true;
+    }
+    CHECK(sawPositive);
+    CHECK(sawNegative);
+}
+
+TEST_CASE("Oscillator Noise clocks the LFSR roughly once per period at the configured frequency") {
+    const uint32_t sampleRate = 48000;
+    const float frequency = 1000.0f; // -> up to ~1000 LFSR shifts/sec
+
+    Oscillator osc;
+    osc.SetSampleRate(sampleRate);
+    osc.SetFrequency(frequency);
+    osc.SetWaveform(Waveform::Noise);
+
+    int changes = 0;
+    float previous = osc.NextSample();
+    for (uint32_t i = 1; i < sampleRate; ++i) {
+        float current = osc.NextSample();
+        if (current != previous) {
+            ++changes;
+        }
+        previous = current;
+    }
+
+    // A shifted LFSR bit can coincidentally repeat the previous value, so
+    // only roughly half of ~1000 shifts/sec are expected to register as a
+    // visible change; this is a loose sanity bound, not an exact count.
+    CHECK(changes > 0);
+    CHECK(changes < static_cast<int>(frequency));
+}
+
+TEST_CASE("Oscillator Noise LFSR free-runs and is not reseeded by Reset()") {
+    const uint32_t sampleRate = 48000;
+    const float shiftEveryFrequency = static_cast<float>(sampleRate); // phaseIncrement == 1 -> one LFSR shift per sample
+
+    Oscillator fresh;
+    fresh.SetSampleRate(sampleRate);
+    fresh.SetFrequency(shiftEveryFrequency);
+    fresh.SetWaveform(Waveform::Noise);
+    std::vector<float> freshSequence;
+    for (int i = 0; i < 50; ++i) {
+        freshSequence.push_back(fresh.NextSample());
+    }
+
+    // Advance a second oscillator's LFSR well past the fresh oscillator's
+    // state, then Reset() it (simulating a note retrigger) and capture the
+    // next samples. If Reset() reseeded the LFSR, this would exactly match
+    // freshSequence; it doesn't, because Reset() leaves the LFSR alone.
+    Oscillator used;
+    used.SetSampleRate(sampleRate);
+    used.SetFrequency(shiftEveryFrequency);
+    used.SetWaveform(Waveform::Noise);
+    for (int i = 0; i < 5000; ++i) {
+        used.NextSample();
+    }
+    used.Reset();
+    std::vector<float> afterResetSequence;
+    for (int i = 0; i < 50; ++i) {
+        afterResetSequence.push_back(used.NextSample());
+    }
+
+    bool identical = true;
+    for (size_t i = 0; i < freshSequence.size(); ++i) {
+        if (freshSequence[i] != afterResetSequence[i]) {
+            identical = false;
+            break;
+        }
+    }
+    CHECK_FALSE(identical);
 }

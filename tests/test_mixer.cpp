@@ -49,6 +49,39 @@ TEST_CASE("Mixer drops NoteOn for an unknown instrument") {
     CHECK(mixer.NoteOn("does_not_exist", 440.0f, 1.0f) == -1);
 }
 
+TEST_CASE("Mixer reuses voices for a one-shot (zero-sustain) percussion instrument past pool size") {
+    // A noise-channel drum/hi-hat instrument never receives NoteOff, and
+    // relies entirely on its zero-sustain envelope finishing on its own to
+    // free its voice slot back to the pool. Trigger it well more than
+    // kMaxSynthVoices times, fully decaying each one first, and confirm
+    // every trigger still gets a real voice rather than the pool silently
+    // filling up and dropping notes.
+    Mixer mixer;
+    const uint32_t sampleRate = 1000;
+    mixer.Configure(sampleRate);
+
+    SynthInstrumentDef def;
+    def.waveform = Waveform::Noise;
+    def.envelope.attackSec = 0.001f;
+    def.envelope.decaySec = 0.005f; // 5 samples @ 1000Hz
+    def.envelope.sustainLevel = 0.0f;
+    def.envelope.releaseSec = 0.001f;
+    def.gain = 1.0f;
+    mixer.AddSynthInstrument("hihat", def);
+
+    const int triggerCount = static_cast<int>(Mixer::kMaxSynthVoices) * 3;
+    for (int i = 0; i < triggerCount; ++i) {
+        int handle = mixer.NoteOn("hihat", 4000.0f, 0.5f);
+        CHECK(handle >= 0);
+
+        // Render well past attack+decay so the envelope reaches Idle and
+        // frees the voice before the next trigger.
+        for (int s = 0; s < 20; ++s) {
+            mixer.RenderNextSample();
+        }
+    }
+}
+
 TEST_CASE("Mixer suppresses NoteOn on a muted track") {
     Mixer mixer;
     mixer.Configure(1000);

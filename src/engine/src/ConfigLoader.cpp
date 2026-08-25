@@ -25,6 +25,7 @@ Waveform ParseWaveform(const std::string& name) {
     if (name == "saw") return Waveform::Saw;
     if (name == "square") return Waveform::Square;
     if (name == "triangle") return Waveform::Triangle;
+    if (name == "noise") return Waveform::Noise;
     throw std::runtime_error("ConfigLoader: unknown waveform '" + name + "'");
 }
 

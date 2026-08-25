@@ -47,7 +47,14 @@ float Envelope::NextSample() {
             m_level -= m_decayRate;
             if (m_level <= m_params.sustainLevel) {
                 m_level = m_params.sustainLevel;
-                m_stage = Stage::Sustain;
+                // A zero sustain level means "one-shot decay, no held tail"
+                // (the shape a percussive/noise instrument wants). Holding
+                // in Stage::Sustain at silence would be observationally the
+                // same as finishing, but SynthVoice/Mixer only ever free a
+                // voice's pool slot once IsFinished() is true, and nothing
+                // else in the engine sends NoteOff for a one-shot hit -- so
+                // without this, the voice would sit "active" forever.
+                m_stage = m_params.sustainLevel <= 0.0f ? Stage::Idle : Stage::Sustain;
             }
             break;
 

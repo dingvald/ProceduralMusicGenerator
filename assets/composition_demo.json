@@ -18,6 +18,13 @@
       "type": "sample",
       "file": "samples/kick.wav",
       "gain": 0.9
+    },
+    {
+      "id": "hihat",
+      "type": "synth",
+      "waveform": "noise",
+      "gain": 0.3,
+      "envelope": { "attack": 0.001, "decay": 0.04, "sustain": 0.0, "release": 0.01 }
     }
   ],
   "patterns": [
@@ -27,9 +34,17 @@
       "steps": [
         { "beat": 0.0, "instrument": "kick", "velocity": 1.0 },
         { "beat": 0.0, "instrument": "lead_synth", "degree": 0, "velocity": 0.8, "gate": 0.5 },
+        { "beat": 0.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
+        { "beat": 0.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 },
+        { "beat": 1.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
         { "beat": 1.5, "instrument": "lead_synth", "degree": 2, "velocity": 0.7, "gate": 0.4 },
+        { "beat": 1.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 },
         { "beat": 2.0, "instrument": "kick", "velocity": 1.0 },
-        { "beat": 3.0, "instrument": "lead_synth", "degree": 4, "velocity": 0.9, "gate": 0.5 }
+        { "beat": 2.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
+        { "beat": 2.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 },
+        { "beat": 3.0, "instrument": "lead_synth", "degree": 4, "velocity": 0.9, "gate": 0.5 },
+        { "beat": 3.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
+        { "beat": 3.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 }
       ]
     },
     {
@@ -37,8 +52,16 @@
       "lengthBars": 1,
       "steps": [
         { "beat": 0.0, "instrument": "kick", "velocity": 1.0 },
+        { "beat": 0.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
         { "beat": 0.5, "instrument": "lead_synth", "degree": 3, "velocity": 0.6, "gate": 0.3 },
-        { "beat": 2.5, "instrument": "lead_synth", "degree": 5, "velocity": 0.8, "gate": 0.5 }
+        { "beat": 0.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 },
+        { "beat": 1.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
+        { "beat": 1.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 },
+        { "beat": 2.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
+        { "beat": 2.5, "instrument": "lead_synth", "degree": 5, "velocity": 0.8, "gate": 0.5 },
+        { "beat": 2.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 },
+        { "beat": 3.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
+        { "beat": 3.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 }
       ]
     }
   ],

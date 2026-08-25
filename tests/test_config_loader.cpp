@@ -67,6 +67,25 @@ TEST_CASE("ConfigLoader parses a full valid composition") {
     CHECK(config.loFi.holdFactor == 1);
 }
 
+TEST_CASE("ConfigLoader parses a noise-waveform synth instrument") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "key": { "root": "C", "scale": "major" },
+      "startPattern": "p1",
+      "instruments": [
+        { "id": "hihat", "type": "synth", "waveform": "noise",
+          "envelope": { "attack": 0.001, "decay": 0.04, "sustain": 0.0, "release": 0.02 } }
+      ],
+      "patterns": [ { "id": "p1", "steps": [] } ]
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    REQUIRE(config.instruments.size() == 1);
+    CHECK(config.instruments[0].waveform == Waveform::Noise);
+}
+
 TEST_CASE("ConfigLoader throws on missing required field") {
     const char* missingTempo = R"JSON(
     {

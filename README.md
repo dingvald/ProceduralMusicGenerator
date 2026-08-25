@@ -2,10 +2,12 @@
 
 A procedural/generative music engine written in modern C++. It supports:
 
-- **Procedural synth playback** — oscillator (sine/saw/square/triangle) + ADSR envelope voices.
-  Square supports a configurable **duty cycle** (e.g. 12.5/25/50/75%), like the pulse channels on
-  real chip sound hardware (NES, Game Boy) — a 50% square and a 25%-duty pulse are recognizably
-  different timbres even at the same pitch.
+- **Procedural synth playback** — oscillator (sine/saw/square/triangle/noise) + ADSR envelope
+  voices. Square supports a configurable **duty cycle** (e.g. 12.5/25/50/75%), like the pulse
+  channels on real chip sound hardware (NES, Game Boy) — a 50% square and a 25%-duty pulse are
+  recognizably different timbres even at the same pitch. **Noise** is a free-running 15-bit LFSR
+  (matching the NES APU's noise channel), for procedurally generated percussion instead of only
+  WAV-sample drums.
 - **Sample playback** — WAV samples decoded and triggered alongside synth voices.
 - **Real-time dynamic variation** — a pluggable `IVariationStrategy` behind `VariationEngine`
   decides pattern swaps and track mutes live. Two implementations ship: a rule-based,
@@ -36,8 +38,8 @@ constrains which features earn a place here:
   unless they're in service of an authentically chip-like effect.
 - Favor primitives real sound chips actually had: pulse waves with a **selectable duty cycle**
   (shipped — `Oscillator::SetDutyCycle`), coarse **bit-depth/sample-hold quantization** on the
-  output stage (shipped — `LoFiProcessor`), a **noise channel** (LFSR-style) for percussion
-  instead of only sample playback (not yet built), and low **polyphony per channel** (chip
+  output stage (shipped — `LoFiProcessor`), an LFSR **noise channel** for percussion instead of
+  only sample playback (shipped — `Waveform::Noise`), and low **polyphony per channel** (chip
   channels rarely stacked notes — arpeggios faked chords by cycling one channel's pitch quickly;
   not yet built).
 - The variation system (rule-based / Markov-chain pattern swapping, track muting) is squarely in
@@ -130,10 +132,18 @@ directory containing `composition_demo.json`, since one test loads it indirectly
 ## Composition JSON
 
 See `assets/composition_demo.json` for a worked example: two one-bar patterns, a 25%-duty pulse
-synth lead instrument, a sample-based kick instrument, and two variation rules (a per-bar pattern
-swap and an occasional kick mute). Degree-based synth steps (`"degree"`) are resolved against the
-composition's `key`/`scale` once at load time via `Theory::DegreeToFrequency`; steps without a
-`"degree"` field are treated as sample triggers.
+synth lead instrument, a sample-based kick instrument, a noise-channel hi-hat instrument, and two
+variation rules (a per-bar pattern swap and an occasional kick mute). Degree-based synth steps
+(`"degree"`) are resolved against the composition's `key`/`scale` once at load time via
+`Theory::DegreeToFrequency`; steps without a `"degree"` field are treated as sample triggers.
+
+A synth instrument with `"waveform": "noise"` has no real pitch — its `"degree"` instead selects
+an LFSR clock rate via the same scale/root resolution as a pitched instrument (a high degree gives
+a fast clock and a bright/hissy texture; a low one gives a slow clock and a duller/rumbling one).
+That's a deliberate reuse of the existing degree machinery rather than a new one, so a noise
+instrument's texture will shift if the composition's key/scale changes — accepted as a known
+quirk rather than adding a second, NES-tracker-style fixed noise-period table. `"dutyCycle"` is
+ignored for noise, like the other non-`Square` waveforms.
 
 A synth instrument with `"waveform": "square"` accepts an optional `"dutyCycle"` field (0-1,
 default `0.5`), matching a chip pulse channel's duty setting — e.g. `0.125`, `0.25`, `0.5`, and
@@ -204,3 +214,21 @@ output unquantized, matching pre-`LoFiProcessor` behavior.
   the device buffer — the processor is a no-op when unconfigured, so this costs nothing when
   `"loFi"` is absent from the composition. It's a single global stage (like a real chip's shared
   DAC), not per-instrument.
+- **Noise channel**: `Oscillator`'s `Waveform::Noise` case is a 15-bit Fibonacci LFSR (taps at
+  bits 0/1, matching the NES APU's noise channel), clocked once per period at the voice's
+  configured frequency and held between clocks. `Reset()` deliberately does not reseed it, so a
+  retriggered noise instrument (e.g. a hi-hat hit repeatedly) doesn't replay an identical
+  pseudo-random sequence every time — the LFSR free-runs continuously off its own clock, like real
+  hardware's noise generator does, independent of note triggers.
+- **One-shot envelopes free their voice on their own**: nothing in the engine currently sends
+  `NoteOff` based on a step's `"gate"` duration — the field is parsed but not yet wired to a
+  scheduled release (a known, pre-existing gap; fixing it properly needs a way to route `NoteOff`
+  by instrument id rather than by voice handle, since the control thread that would schedule it
+  never learns which handle the audio thread assigned). What *is* handled: `Envelope`'s `Decay`
+  stage transitions straight to `Idle` (instead of holding in `Sustain`) when `"sustain"` is `0`,
+  so a percussive one-shot instrument's voice is freed back to `Mixer`'s pool as soon as it
+  finishes decaying, with no `NoteOff` required — this is what makes the noise-channel hi-hat (and
+  any other zero-sustain instrument) usable for a real, ongoing performance rather than
+  permanently leaking a voice slot per hit. A synth instrument with a nonzero sustain level (e.g.
+  `lead_synth`) still holds its voice indefinitely once triggered, since it's still relying on a
+  `NoteOff` that never comes.
