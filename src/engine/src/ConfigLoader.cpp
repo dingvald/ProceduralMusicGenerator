@@ -1,10 +1,14 @@
 #include "engine/ConfigLoader.h"
 
 #include <fstream>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 
+#include "engine/MelodyGenerator.h"
 #include "engine/NoteStringParser.h"
+#include "engine/RandomSource.h"
+#include "engine/RhythmGenerator.h"
 #include "engine/Theory.h"
 #include "nlohmann/json.hpp"
 
@@ -111,6 +115,53 @@ MelodyConfig ParseMelody(const json& j, const std::string& patternId) {
     return melody;
 }
 
+// A generated block's "seed" is consumed immediately (the RandomSource it
+// seeds is only ever used right here, to expand the block into StepConfigs),
+// so it's read straight from JSON rather than round-tripped through
+// GeneratedMelodyConfig/GeneratedRhythmConfig. Omitting it falls back to
+// std::random_device, matching main.cpp's existing non-reproducible-by-default
+// seeding for the rest of the engine; an explicit seed makes just this one
+// block's generated content reproducible run-to-run.
+uint64_t ReadSeed(const json& j) {
+    return j.value<uint64_t>("seed", static_cast<uint64_t>(std::random_device{}()));
+}
+
+GeneratedMelodyConfig ParseGeneratedMelody(const json& j, const std::string& patternId) {
+    GeneratedMelodyConfig gen;
+    gen.instrument =
+        RequireField(j, "instrument", "generatedMelody in pattern '" + patternId + "'").get<std::string>();
+    gen.key = Theory::ParseNoteName(j.value("key", std::string("C")));
+    gen.scale = Theory::ParseScale(j.value("scale", std::string("majorPentatonic")));
+    gen.baseOctave = j.value("baseOctave", 4);
+    gen.octaveRange = j.value("octaveRange", 1);
+    gen.lengthBeats = j.value("lengthBeats", 8.0);
+    gen.noteLengthBeats = j.value("noteLengthBeats", 1.0);
+    gen.restProbability = j.value("restProbability", 0.15f);
+    gen.gateFraction = j.value("gateFraction", 0.8f);
+    gen.velocity = j.value("velocity", 0.8f);
+    return gen;
+}
+
+GeneratedRhythmConfig ParseGeneratedRhythm(const json& j, const std::string& patternId) {
+    GeneratedRhythmConfig gen;
+    gen.instrument =
+        RequireField(j, "instrument", "generatedRhythm in pattern '" + patternId + "'").get<std::string>();
+    gen.steps = j.value("steps", 16);
+    gen.pulses = j.value("pulses", 5);
+    gen.lengthBeats = j.value("lengthBeats", 4.0);
+    gen.velocity = j.value("velocity", 0.6f);
+    gen.velocityJitter = j.value("velocityJitter", 0.0f);
+    gen.gate = j.value("gate", 0.1f);
+
+    auto noteIt = j.find("note");
+    if (noteIt != j.end()) {
+        gen.hasNote = true;
+        gen.note = Theory::ParseNoteName(noteIt->get<std::string>());
+        gen.octave = j.value("octave", 8);
+    }
+    return gen;
+}
+
 PatternConfig ParsePattern(const json& j) {
     PatternConfig pattern;
     pattern.id = RequireField(j, "id", "pattern").get<std::string>();
@@ -130,6 +181,36 @@ PatternConfig ParsePattern(const json& j) {
             } catch (const std::exception& e) {
                 throw std::runtime_error("ConfigLoader: pattern '" + pattern.id + "' melody for instrument '" +
                                           melody.instrument + "': " + e.what());
+            }
+        }
+    }
+
+    if (j.contains("generatedMelodies")) {
+        for (const auto& genJson : j["generatedMelodies"]) {
+            GeneratedMelodyConfig genConfig = ParseGeneratedMelody(genJson, pattern.id);
+            try {
+                RandomSource rng(ReadSeed(genJson));
+                std::vector<StepConfig> genSteps = GenerateMelody(genConfig, rng);
+                pattern.steps.insert(pattern.steps.end(), genSteps.begin(), genSteps.end());
+            } catch (const std::exception& e) {
+                throw std::runtime_error("ConfigLoader: pattern '" + pattern.id +
+                                          "' generatedMelody for instrument '" + genConfig.instrument +
+                                          "': " + e.what());
+            }
+        }
+    }
+
+    if (j.contains("generatedRhythms")) {
+        for (const auto& genJson : j["generatedRhythms"]) {
+            GeneratedRhythmConfig genConfig = ParseGeneratedRhythm(genJson, pattern.id);
+            try {
+                RandomSource rng(ReadSeed(genJson));
+                std::vector<StepConfig> genSteps = GenerateRhythm(genConfig, rng);
+                pattern.steps.insert(pattern.steps.end(), genSteps.begin(), genSteps.end());
+            } catch (const std::exception& e) {
+                throw std::runtime_error("ConfigLoader: pattern '" + pattern.id +
+                                          "' generatedRhythm for instrument '" + genConfig.instrument +
+                                          "': " + e.what());
             }
         }
     }

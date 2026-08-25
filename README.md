@@ -30,6 +30,10 @@ A procedural/generative music engine written in modern C++. It supports:
   include a `"melodies"` block with a plain note-string like `"A B G F#"`, expanded into steps at
   load time. Pitch is always an absolute note name + octave (e.g. `A4`) — there's no separate
   scale-degree/key system to learn first.
+- **Procedural melody/rhythm generation** — a pattern can include `"generatedMelodies"`
+  (scale-constrained random-walk melodies, expanded at load time from a key/scale/RNG seed instead
+  of hand-written notes) and `"generatedRhythms"` (Euclidean-rhythm percussion, via Bjorklund's
+  algorithm). Optionally seeded for fully reproducible output.
 
 Built with [premake5](https://premake.github.io/); targets Windows via Visual Studio 2026 for
 this pass (see **Build** below for the current premake action caveat).
@@ -135,6 +139,7 @@ DemoApp composition_demo_melody.json --null-audio
 DemoApp composition_demo_full.json --null-audio
 DemoApp composition_demo_layers.json --null-audio
 DemoApp composition_battle_theme.json --null-audio
+DemoApp composition_demo_generated.json --null-audio
 ```
 
 ### Rendering to a WAV file (no audio hardware required)
@@ -217,6 +222,59 @@ below), and neither manual nor melody-expanded steps are validated against that 
 placed beyond it (e.g. an 8-beat melody in a `"lengthBars": 1` pattern, which is only 4 beats) will
 silently never play, every cycle, rather than erroring or being deferred. `assets/composition_demo_melody.json`'s
 8-note, 8-beat melody uses `"lengthBars": 2` for exactly this reason.
+
+### Procedural generation
+
+`"melodies"` (above) and hand-placed `"steps"` both require every note to be author-written —
+useful for authoring, but not actual generation. A pattern can instead include
+`"generatedMelodies"` and `"generatedRhythms"` blocks, which algorithmically produce steps at
+load time (same as `"melodies"` note-strings — pure JSON-authoring sugar expanded once by
+`ConfigLoader`, invisible to everything downstream):
+
+```json
+"generatedMelodies": [
+  { "instrument": "lead_synth", "key": "A", "scale": "minorPentatonic",
+    "baseOctave": 4, "octaveRange": 1, "lengthBeats": 8, "noteLengthBeats": 0.5,
+    "restProbability": 0.15, "gateFraction": 0.7, "velocity": 0.85, "seed": 42 }
+],
+"generatedRhythms": [
+  { "instrument": "hihat", "steps": 16, "pulses": 11, "lengthBeats": 8,
+    "note": "C", "octave": 8, "velocity": 0.35, "velocityJitter": 0.1, "gate": 0.05 }
+]
+```
+
+See `assets/composition_demo_generated.json` for a full worked example (a generated lead +
+bass melody over generated kick/hi-hat rhythms), runnable via `DemoApp
+composition_demo_generated.json --render-wav generated.wav`.
+
+**`"generatedMelodies"`** — a scale-constrained random walk. Starting on `"key"`'s root, each
+`"noteLengthBeats"`-sized slot either rests (probability `"restProbability"`, default `0.15`) or
+moves by a weighted random scale-degree step (small movements dominate, larger leaps are rarer,
+so the contour stays smooth rather than jumping around), clamped so the walk never leaves
+`["baseOctave", "baseOctave" + "octaveRange"]` (default octave range `1`). `"scale"` is one of
+`"major"`, `"naturalMinor"`, `"harmonicMinor"`, `"dorian"`, `"mixolydian"`, `"majorPentatonic"`
+(default), `"minorPentatonic"`, or `"blues"` — every emitted note is guaranteed to be a member of
+that scale, which is what makes the output sound musical rather than picking arbitrary pitches.
+`"gateFraction"` and `"velocity"` behave exactly like their `"melodies"` counterparts.
+
+**`"generatedRhythms"`** — a Euclidean rhythm: `"pulses"` hits spread as evenly as possible across
+`"steps"` grid slots over `"lengthBeats"`, via Bjorklund's algorithm (the construction behind most
+traditional world-music bell/clave/drum patterns — e.g. `steps: 8, pulses: 3` is `10010010`,
+`steps: 8, pulses: 5` is the Cuban cinquillo `10110110`). Optional `"note"`/`"octave"` pass through
+to every hit exactly like a hand-written step (meaningful for a noise-channel instrument, where
+they select an LFSR clock rate — see the noise-channel note above); omitting them plays each hit
+at the instrument's default, fine for a sample instrument like a kick. `"velocityJitter"` (default
+`0`, deterministic) applies a small per-hit random offset to `"velocity"` for light humanization.
+
+**Seeding**: an optional `"seed"` (any integer) on either block makes just that block's generated
+content reproducible run-to-run — same `"seed"`, byte-identical notes/rhythm every load. Omitting
+it seeds from `std::random_device`, matching this engine's existing default (non-reproducible
+unless a seed is given) for everything else that's randomized. Each block seeds independently, so
+e.g. a melody and its accompanying rhythm can be regenerated separately without disturbing each
+other.
+
+A pattern can freely mix `"steps"`, `"melodies"`, `"generatedMelodies"`, and `"generatedRhythms"`
+in any combination.
 
 A synth instrument with `"waveform": "square"` accepts an optional `"dutyCycle"` field (0-1,
 default `0.5`), matching a chip pulse channel's duty setting — e.g. `0.125`, `0.25`, `0.5`, and
@@ -678,3 +736,32 @@ sibling (15%) or returning to either riff variant (15% each). Render it to a WAV
   `Pattern::ResolvePattern`. This is also why the noise channel's `"note"`/`"octave"`-selects-an-
   LFSR-clock-rate behavior (above) needs no special-casing to explain: it's the exact same
   resolution path every pitched step already goes through.
+- **Scale/key model is additive, not a reintroduction of scale degrees**: the note above explains
+  why per-step scale-degree pitch was removed for *hand-authored* steps. `Theory::Scale` +
+  `Theory::DegreeToNote` (added for `MelodyGenerator`) don't undo that — they're consumed only by
+  the generator, once, at load time, to pick which absolute `NoteName`+octave a generated note
+  gets; the resulting `StepConfig` is indistinguishable from a hand-written or note-string one by
+  the time it reaches `Pattern::ResolvePattern`. `DegreeToNote` resolves a (possibly negative,
+  possibly `>= scale size`) degree by splitting it into an octave-shift and an in-scale index via
+  floor-division/floor-modulo (not truncating `/`/`%`, so negative degrees wrap into the octave
+  *below* rather than toward zero) and reuses the same MIDI-offset arithmetic as
+  `NoteToFrequency`.
+- **Procedural generation is pure JSON-authoring sugar, same seam as melody note-strings**:
+  `MelodyGenerator::GenerateMelody` and `RhythmGenerator::GenerateRhythm` are plain functions (no
+  JSON dependency, independently unit-tested) called by `ConfigLoader::ParsePattern` for each
+  `"generatedMelodies"`/`"generatedRhythms"` entry, producing ordinary `StepConfig`s appended to
+  the pattern's `steps` — everything downstream is exactly as unaware of generated-vs-authored
+  steps as it already is of note-string-vs-hand-written ones. `GenerateMelody` walks scale degrees
+  (starting at the root) via a weighted random delta biased toward small movement, re-checking
+  every candidate delta's resulting octave against `[baseOctave, baseOctave + octaveRange]` each
+  step so the walk can never leave its configured range — delta 0 (stay put) is always a valid
+  fallback since the current degree was itself validated the step before. `GenerateRhythm` builds
+  a Euclidean rhythm via the classic two-list Bjorklund construction (iteratively merging a list of
+  `pulses` singleton `[hit]` groups with a list of `steps - pulses` singleton `[rest]` groups,
+  pairing off from the front until at most one group remains on the shorter list, then
+  concatenating) — this is what makes `GenerateRhythm({8, 3, ...})` produce the traditional
+  `10010010` rather than some arbitrary evenly-spread pattern. Each generated block seeds its own
+  local `RandomSource` from an optional per-block `"seed"` (`ConfigLoader::ReadSeed`, falling back
+  to `std::random_device` like the rest of the engine's otherwise-non-reproducible RNG usage) — so
+  a fixed seed makes exactly one block's output reproducible without needing any shared RNG state
+  threaded through `ConfigLoader`'s otherwise-stateless parsing.

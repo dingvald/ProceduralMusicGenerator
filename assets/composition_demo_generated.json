@@ -1,0 +1,102 @@
+{
+  "sampleRate": 48000,
+  "tempo": { "bpm": 100, "beatsPerBar": 4 },
+  "startPattern": "generated_verse",
+  "loFi": { "bitDepth": 4, "holdFactor": 3 },
+  "instruments": [
+    {
+      "id": "lead_synth",
+      "type": "synth",
+      "waveform": "square",
+      "dutyCycle": 0.25,
+      "gain": 0.35,
+      "envelope": { "attack": 0.01, "decay": 0.12, "sustain": 0.55, "release": 0.2 }
+    },
+    {
+      "id": "bass_synth",
+      "type": "synth",
+      "waveform": "triangle",
+      "gain": 0.4,
+      "envelope": { "attack": 0.005, "decay": 0.08, "sustain": 0.8, "release": 0.05 }
+    },
+    {
+      "id": "kick",
+      "type": "sample",
+      "file": "samples/kick.wav",
+      "gain": 0.9
+    },
+    {
+      "id": "hihat",
+      "type": "synth",
+      "waveform": "noise",
+      "gain": 0.25,
+      "envelope": { "attack": 0.001, "decay": 0.035, "sustain": 0.0, "release": 0.01 }
+    }
+  ],
+  "patterns": [
+    {
+      "id": "generated_verse",
+      "lengthBars": 2,
+      "generatedMelodies": [
+        {
+          "instrument": "lead_synth",
+          "key": "A",
+          "scale": "minorPentatonic",
+          "baseOctave": 5,
+          "octaveRange": 1,
+          "lengthBeats": 8,
+          "noteLengthBeats": 0.5,
+          "restProbability": 0.15,
+          "gateFraction": 0.7,
+          "velocity": 0.85,
+          "seed": 42
+        },
+        {
+          "instrument": "bass_synth",
+          "key": "A",
+          "scale": "minorPentatonic",
+          "baseOctave": 2,
+          "octaveRange": 0,
+          "lengthBeats": 8,
+          "noteLengthBeats": 1.0,
+          "restProbability": 0.1,
+          "gateFraction": 0.9,
+          "velocity": 0.75,
+          "seed": 7
+        }
+      ],
+      "generatedRhythms": [
+        {
+          "instrument": "kick",
+          "steps": 8,
+          "pulses": 3,
+          "lengthBeats": 8,
+          "velocity": 0.95,
+          "gate": 0.15
+        },
+        {
+          "instrument": "hihat",
+          "steps": 16,
+          "pulses": 11,
+          "lengthBeats": 8,
+          "note": "C",
+          "octave": 8,
+          "velocity": 0.35,
+          "velocityJitter": 0.1,
+          "gate": 0.05,
+          "seed": 3
+        }
+      ]
+    }
+  ],
+  "variationRules": [
+    {
+      "id": "mute_bass_occasionally",
+      "scope": "perBar",
+      "options": [
+        { "type": "setTrackMuted", "track": "bass_synth", "muted": true, "weight": 0.15 },
+        { "type": "setTrackMuted", "track": "bass_synth", "muted": false, "weight": 0.85 }
+      ]
+    }
+  ]
+}

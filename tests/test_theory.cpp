@@ -69,3 +69,82 @@ TEST_CASE("Theory::NoteToFrequency handles extreme octaves without crashing, mon
     CHECK(low > 0.0f);
     CHECK(high > low);
 }
+
+TEST_CASE("Theory::ParseScale round-trips every known scale name") {
+    CHECK(Theory::ParseScale("major") == Scale::Major);
+    CHECK(Theory::ParseScale("naturalMinor") == Scale::NaturalMinor);
+    CHECK(Theory::ParseScale("harmonicMinor") == Scale::HarmonicMinor);
+    CHECK(Theory::ParseScale("dorian") == Scale::Dorian);
+    CHECK(Theory::ParseScale("mixolydian") == Scale::Mixolydian);
+    CHECK(Theory::ParseScale("majorPentatonic") == Scale::MajorPentatonic);
+    CHECK(Theory::ParseScale("minorPentatonic") == Scale::MinorPentatonic);
+    CHECK(Theory::ParseScale("blues") == Scale::Blues);
+}
+
+TEST_CASE("Theory::ParseScale throws on an unknown scale name") {
+    CHECK_THROWS_AS(Theory::ParseScale("phrygian"), std::runtime_error);
+    CHECK_THROWS_AS(Theory::ParseScale(""), std::runtime_error);
+}
+
+TEST_CASE("Theory::ScaleIntervals: every scale starts on the root (interval 0)") {
+    CHECK(Theory::ScaleIntervals(Scale::Major).front() == 0);
+    CHECK(Theory::ScaleIntervals(Scale::NaturalMinor).front() == 0);
+    CHECK(Theory::ScaleIntervals(Scale::MajorPentatonic).front() == 0);
+    CHECK(Theory::ScaleIntervals(Scale::Blues).front() == 0);
+}
+
+TEST_CASE("Theory::ScaleIntervals: Major matches the standard whole/half-step pattern") {
+    CHECK(Theory::ScaleIntervals(Scale::Major) == std::vector<int>{0, 2, 4, 5, 7, 9, 11});
+}
+
+TEST_CASE("Theory::ScaleIntervals: pentatonic scales have exactly 5 degrees") {
+    CHECK(Theory::ScaleIntervals(Scale::MajorPentatonic).size() == 5);
+    CHECK(Theory::ScaleIntervals(Scale::MinorPentatonic).size() == 5);
+}
+
+TEST_CASE("Theory::DegreeToNote: degree 0 is exactly the root, at baseOctave") {
+    NoteName note;
+    int octave;
+    Theory::DegreeToNote(NoteName::A, Scale::MajorPentatonic, 0, 4, note, octave);
+    CHECK(note == NoteName::A);
+    CHECK(octave == 4);
+}
+
+TEST_CASE("Theory::DegreeToNote: C major degree 1 is D4, degree 7 wraps to C5") {
+    NoteName note;
+    int octave;
+
+    Theory::DegreeToNote(NoteName::C, Scale::Major, 1, 4, note, octave);
+    CHECK(note == NoteName::D);
+    CHECK(octave == 4);
+
+    Theory::DegreeToNote(NoteName::C, Scale::Major, 7, 4, note, octave);
+    CHECK(note == NoteName::C);
+    CHECK(octave == 5);
+}
+
+TEST_CASE("Theory::DegreeToNote: negative degrees wrap down into the octave below") {
+    NoteName note;
+    int octave;
+
+    // C major degree -1 is the scale's 7th degree (B) one octave down.
+    Theory::DegreeToNote(NoteName::C, Scale::Major, -1, 4, note, octave);
+    CHECK(note == NoteName::B);
+    CHECK(octave == 3);
+}
+
+TEST_CASE("Theory::DegreeToNote: frequency rises monotonically as degree increases") {
+    NoteName prevNote;
+    int prevOctave;
+    Theory::DegreeToNote(NoteName::A, Scale::MinorPentatonic, 0, 4, prevNote, prevOctave);
+    float prevFreq = Theory::NoteToFrequency(prevNote, prevOctave);
+
+    for (int degree = 1; degree <= 10; ++degree) {
+        NoteName note;
+        int octave;
+        Theory::DegreeToNote(NoteName::A, Scale::MinorPentatonic, degree, 4, note, octave);
+        float freq = Theory::NoteToFrequency(note, octave);
+        CHECK(freq > prevFreq);
+        prevFreq = freq;
+    }
+}

@@ -62,11 +62,45 @@ struct MelodyConfig {
     float velocity = 0.8f;
 };
 
+// Config for a scale-constrained, procedurally-generated melody (see
+// MelodyGenerator::GenerateMelody). Distinct from MelodyConfig above, which
+// expands an author-written note-string instead of generating one.
+struct GeneratedMelodyConfig {
+    std::string instrument;
+    NoteName key = NoteName::C;
+    Scale scale = Scale::MajorPentatonic;
+    int baseOctave = 4;
+    int octaveRange = 1;          // random walk stays within [baseOctave, baseOctave + octaveRange]
+    double lengthBeats = 8.0;
+    double noteLengthBeats = 1.0; // per-slot duration, in beats
+    float restProbability = 0.15f;
+    float gateFraction = 0.8f;    // fraction of noteLengthBeats actually held before auto-release
+    float velocity = 0.8f;
+};
+
+// Config for a procedurally-generated Euclidean rhythm (see
+// RhythmGenerator::GenerateRhythm) -- distributes `pulses` hits as evenly as
+// possible across `steps` slots via Bjorklund's algorithm.
+struct GeneratedRhythmConfig {
+    std::string instrument;
+    int steps = 16; // grid resolution
+    int pulses = 5; // how many of `steps` are hits
+    double lengthBeats = 4.0;
+    bool hasNote = false; // mirrors StepConfig::hasNote -- set for a pitched/noise-clocked hit
+    NoteName note = NoteName::C;
+    int octave = 8;
+    float velocity = 0.6f;
+    float velocityJitter = 0.0f; // +/- random velocity offset per hit (0 = none, deterministic)
+    float gate = 0.1f;
+};
+
 struct PatternConfig {
     std::string id;
     int lengthBars = 1;
     std::vector<StepConfig> steps;
     std::vector<MelodyConfig> melodies;
+    std::vector<GeneratedMelodyConfig> generatedMelodies;
+    std::vector<GeneratedRhythmConfig> generatedRhythms;
 };
 
 enum class VariationOptionType { NoOp, SwapPattern, SetTrackMuted, AddLayer, RemoveLayer };
