@@ -15,7 +15,6 @@
 #include "engine/RandomSource.h"
 #include "engine/SampleLoader.h"
 #include "engine/Sequencer.h"
-#include "engine/Theory.h"
 #include "engine/VariationEngine.h"
 
 int main(int argc, char** argv) {
@@ -44,13 +43,10 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    NoteName root = Theory::ParseNoteName(config.key.root);
-    ScaleType scale = Theory::ParseScaleType(config.key.scale);
-
     std::vector<Pattern> patterns;
     patterns.reserve(config.patterns.size());
     for (const PatternConfig& patternConfig : config.patterns) {
-        patterns.push_back(ResolvePattern(patternConfig, root, scale));
+        patterns.push_back(ResolvePattern(patternConfig));
     }
 
     AudioEngine audioEngine;

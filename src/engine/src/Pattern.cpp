@@ -4,7 +4,7 @@
 
 namespace pmg {
 
-Pattern ResolvePattern(const PatternConfig& config, NoteName root, ScaleType scale) {
+Pattern ResolvePattern(const PatternConfig& config) {
     Pattern pattern;
     pattern.id = config.id;
     pattern.lengthBars = config.lengthBars;
@@ -16,9 +16,9 @@ Pattern ResolvePattern(const PatternConfig& config, NoteName root, ScaleType sca
         step.instrument = stepConfig.instrument;
         step.velocity = stepConfig.velocity;
         step.gate = stepConfig.gate;
-        step.isSynth = stepConfig.hasDegree;
+        step.isSynth = stepConfig.hasNote;
         if (step.isSynth) {
-            step.frequencyHz = Theory::DegreeToFrequency(root, scale, stepConfig.degree);
+            step.frequencyHz = Theory::NoteToFrequency(stepConfig.note, stepConfig.octave);
         }
         pattern.steps.push_back(step);
     }

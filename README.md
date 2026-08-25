@@ -13,8 +13,8 @@ A procedural/generative music engine written in modern C++. It supports:
   decides pattern swaps and track mutes live. Two implementations ship: a rule-based,
   weighted-random strategy, and a **Markov-chain strategy** that samples the next pattern from a
   weighted transition table keyed by the pattern currently playing.
-- **JSON-driven composition** — tempo, key/scale, instruments, patterns, and variation rules (or a
-  Markov transition table) are all defined in a JSON file loaded at startup (see
+- **JSON-driven composition** — tempo, instruments, patterns, and variation rules (or a Markov
+  transition table) are all defined in a JSON file loaded at startup (see
   `assets/composition_demo.json` and `assets/composition_demo_markov.json`).
 - **Lo-fi output stage** — an optional post-mix `LoFiProcessor` quantizes amplitude to a coarse
   bit depth and/or holds samples across a configurable window (naive, unfiltered downsampling),
@@ -22,6 +22,10 @@ A procedural/generative music engine written in modern C++. It supports:
 - **Arpeggiator** — an optional per-instrument `Arpeggiator` cycles a held note's pitch through a
   list of semitone offsets at a fixed rate, faking a chord on a single channel — the standard way
   chip music implied harmony despite hardware with only 1-3 melodic voices.
+- **Compact melody authoring** — instead of writing a full step object per note, a pattern can
+  include a `"melodies"` block with a plain note-string like `"A B G F#"`, expanded into steps at
+  load time. Pitch is always an absolute note name + octave (e.g. `A4`) — there's no separate
+  scale-degree/key system to learn first.
 
 Built with [premake5](https://premake.github.io/); targets Windows via Visual Studio 2026 for
 this pass (see **Build** below for the current premake action caveat).
@@ -123,6 +127,7 @@ exercised without real audio hardware. It also accepts an optional composition J
 ```
 DemoApp --null-audio
 DemoApp composition_demo_markov.json --null-audio
+DemoApp composition_demo_melody.json --null-audio
 ```
 
 ### Running the tests
@@ -136,18 +141,59 @@ directory containing `composition_demo.json`, since one test loads it indirectly
 See `assets/composition_demo.json` for a worked example: two one-bar patterns, a 25%-duty pulse
 synth lead instrument, a sample-based kick instrument, a noise-channel hi-hat instrument, an
 arpeggiated chordal pad instrument, and two variation rules (a per-bar pattern swap and an
-occasional kick mute). Degree-based synth steps (`"degree"`) are resolved against the
-composition's `key`/`scale` once at load time via `Theory::DegreeToFrequency`; steps without a
-`"degree"` field are treated as sample triggers. A synth step's `"gate"` (fraction of a beat,
-default `0.25`) is how long the note is held before it's auto-released.
+occasional kick mute). A synth step carries pitch as an absolute note name + octave — `"note"`
+(e.g. `"C"`, `"F#"`, `"Bb"`) and optional `"octave"` (default `4`, so `"note": "A"` alone means
+A4) — resolved via `Theory::NoteToFrequency` once at load time; steps without a `"note"` field are
+treated as sample triggers. A synth step's `"gate"` (fraction of a beat, default `0.25`) is how
+long the note is held before it's auto-released.
 
-A synth instrument with `"waveform": "noise"` has no real pitch — its `"degree"` instead selects
-an LFSR clock rate via the same scale/root resolution as a pitched instrument (a high degree gives
-a fast clock and a bright/hissy texture; a low one gives a slow clock and a duller/rumbling one).
-That's a deliberate reuse of the existing degree machinery rather than a new one, so a noise
-instrument's texture will shift if the composition's key/scale changes — accepted as a known
-quirk rather than adding a second, NES-tracker-style fixed noise-period table. `"dutyCycle"` is
-ignored for noise, like the other non-`Square` waveforms.
+```json
+{ "beat": 1.0, "instrument": "lead_synth", "note": "F#", "octave": 4, "velocity": 0.7, "gate": 0.4 }
+```
+
+A synth instrument with `"waveform": "noise"` has no real pitch — its `"note"`/`"octave"` instead
+select an LFSR clock rate via the same absolute-pitch resolution as a pitched instrument (a high
+octave gives a fast clock and a bright/hissy texture; a low one gives a slow clock and a
+duller/rumbling one) — e.g. `assets/composition_demo.json`'s hi-hat uses `"note": "C", "octave": 8`.
+`"dutyCycle"` is ignored for noise, like the other non-`Square` waveforms.
+
+### Melody note-strings
+
+Instead of one step object per note, a pattern can include a `"melodies"` array — each entry a
+compact note-string that expands into steps at load time:
+
+```json
+"melodies": [
+  { "instrument": "lead_synth", "notes": "A B G F#" }
+]
+```
+
+See `assets/composition_demo_melody.json` for a full worked example (a kick/hi-hat percussion
+pattern plus a `"melodies"` lead line using exactly `"A B G F#"`).
+
+Each whitespace-separated token in `"notes"` is either a note or a rest:
+
+- **Note**: a letter `A`-`G` (case-insensitive), optional accidental (`#` or lowercase `b`), and
+  optional single-digit octave — e.g. `A`, `f#`, `Bb3`. Omitting the octave uses the melody's
+  `"defaultOctave"` (default `4`).
+- **Rest**: `R` (case-insensitive) — advances time without playing a note.
+- Either can end with `:N` to set that token's duration in beats (e.g. `A:2`, `R:0.5`), overriding
+  the melody's `"noteLengthBeats"` (default `1.0`) for just that token.
+
+A running beat cursor starts at `"startBeat"` (default `0.0`) and advances by each token's
+duration in turn, whether it's a note or a rest. `"gateFraction"` (default `0.8`) is the fraction
+of that duration actually held before auto-release, and `"velocity"` (default `0.8`) applies to
+every note in the block. A malformed token (unknown letter, double accidental, trailing garbage,
+non-positive duration, a rest carrying pitch/octave, etc.) throws, naming the offending token.
+
+A pattern can mix a `"melodies"` block with manual `"steps"` (e.g. a compact lead line alongside
+hand-placed percussion) — both `"steps"` and `"melodies"` are optional, but at least one should be
+present for the pattern to do anything. **Set `"lengthBars"` to actually cover your melody**: a
+pattern loops on `"lengthBars"` × the composition's `beatsPerBar` (see **Architecture notes**
+below), and neither manual nor melody-expanded steps are validated against that length — a note
+placed beyond it (e.g. an 8-beat melody in a `"lengthBars": 1` pattern, which is only 4 beats) will
+silently never play, every cycle, rather than erroring or being deferred. `assets/composition_demo_melody.json`'s
+8-note, 8-beat melody uses `"lengthBars": 2` for exactly this reason.
 
 A synth instrument with `"waveform": "square"` accepts an optional `"dutyCycle"` field (0-1,
 default `0.5`), matching a chip pulse channel's duty setting — e.g. `0.125`, `0.25`, `0.5`, and
@@ -215,6 +261,23 @@ output unquantized, matching pre-`LoFiProcessor` behavior.
 - **Threading**: the audio callback thread (real-time, miniaudio) and the control thread (`main`,
   driving `Sequencer`/`VariationEngine`) communicate only through `ParameterBus`, a lock-free
   SPSC command queue — see `src/engine/include/engine/ParameterBus.h`.
+- **A pattern loops on its own length, not the global bar cadence**: `Sequencer::Update` tracks two
+  independent things from the same elapsed-beat clock — how often to ask `VariationEngine` for a
+  decision (every composition-wide `beatsPerBar`, e.g. `"scope": "perBar"` rules firing every 4
+  beats) and how often the *current pattern's* step-scan cursor wraps back to its own beat 0
+  (`pattern.lengthBars * beatsPerBar`, tracked via an anchor beat, `m_patternStartBeat`, that
+  advances by whole pattern-cycles rather than snapping to "now" so playback stays locked to the
+  beat grid instead of drifting). These used to be the same period (the step-scan reset lived
+  inside the bar-evaluation loop), which meant any pattern longer than one bar had its tail beyond
+  beat `beatsPerBar` permanently skipped every cycle — invisible until melody note-strings made
+  multi-bar patterns with real content past beat 4 common. A pattern swap (mid-`Update`, via a
+  variation decision) resets the anchor to the swap instant, so the newly active pattern always
+  starts from its own beat 0 rather than wherever it'd land phase-locked to the old pattern's
+  cycle. `Sequencer` has no direct unit tests (it needs a real `AudioEngine` for its elapsed-frame
+  clock, which doesn't fit this project's fast/deterministic doctest style) — this fix was
+  verified by temporarily logging every `lead_synth` trigger and confirming a 2-bar melody fires
+  all 8 notes in order and loops cleanly, then confirming the existing 1-bar demos are unaffected,
+  against both a reverted and a fixed build.
 - **Variation seam**: `IVariationStrategy` is the pluggable interface behind `VariationEngine`.
   Two implementations ship: `RuleBasedVariationStrategy` (weighted-random per rule; the default)
   and `MarkovChainVariationStrategy` (weighted transition table keyed by current pattern id).
@@ -257,3 +320,17 @@ output unquantized, matching pre-`LoFiProcessor` behavior.
   offset (not wherever a prior note's cycle left off), matching how chip trackers restart an arp
   per note. With no configured offsets, `NextMultiplier()` always returns `1.0`, so an
   unarpeggiated voice's frequency math is unchanged.
+- **Melody note-strings are pure JSON-authoring sugar**: `NoteStringParser::ParseNoteString` is
+  plain string parsing with no JSON dependency (independently unit-tested), called by
+  `ConfigLoader::ParsePattern` for each `"melodies"` entry; its output is ordinary `StepConfig`s
+  appended to the pattern's `steps`, so `Pattern::ResolvePattern`, `Sequencer`, `SynthVoice`, and
+  `ParameterBus` have no idea a step came from a note-string rather than a hand-written step
+  object — everything downstream of `ConfigLoader` treats them identically.
+- **Absolute pitch, not scale degrees**: pitch used to be scale-degree-based (`"degree"` resolved
+  against a composition-wide `"key"`/`"scale"`), but that added a second, more abstract way to say
+  "which pitch" alongside note-string authoring's absolute notes. It was removed in favor of one
+  mechanism: every synth step now carries an absolute `NoteName` + octave, resolved via
+  `Theory::NoteToFrequency` (a plain MIDI-math function, no key/scale context needed) in
+  `Pattern::ResolvePattern`. This is also why the noise channel's `"note"`/`"octave"`-selects-an-
+  LFSR-clock-rate behavior (above) needs no special-casing to explain: it's the exact same
+  resolution path every pitched step already goes through.

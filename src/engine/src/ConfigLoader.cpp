@@ -4,6 +4,8 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "engine/NoteStringParser.h"
+#include "engine/Theory.h"
 #include "nlohmann/json.hpp"
 
 namespace pmg {
@@ -86,12 +88,25 @@ StepConfig ParseStep(const json& j, const std::string& patternId) {
     step.velocity = j.value("velocity", 1.0f);
     step.gate = j.value("gate", 0.25f);
 
-    auto degreeIt = j.find("degree");
-    if (degreeIt != j.end()) {
-        step.hasDegree = true;
-        step.degree = degreeIt->get<int>();
+    auto noteIt = j.find("note");
+    if (noteIt != j.end()) {
+        step.hasNote = true;
+        step.note = Theory::ParseNoteName(noteIt->get<std::string>());
+        step.octave = j.value("octave", 4);
     }
     return step;
+}
+
+MelodyConfig ParseMelody(const json& j, const std::string& patternId) {
+    MelodyConfig melody;
+    melody.instrument = RequireField(j, "instrument", "melody in pattern '" + patternId + "'").get<std::string>();
+    melody.notes = RequireField(j, "notes", "melody in pattern '" + patternId + "'").get<std::string>();
+    melody.startBeat = j.value("startBeat", 0.0);
+    melody.defaultOctave = j.value("defaultOctave", 4);
+    melody.noteLengthBeats = j.value("noteLengthBeats", 1.0);
+    melody.gateFraction = j.value("gateFraction", 0.8f);
+    melody.velocity = j.value("velocity", 0.8f);
+    return melody;
 }
 
 PatternConfig ParsePattern(const json& j) {
@@ -99,10 +114,24 @@ PatternConfig ParsePattern(const json& j) {
     pattern.id = RequireField(j, "id", "pattern").get<std::string>();
     pattern.lengthBars = j.value("lengthBars", 1);
 
-    json steps = RequireField(j, "steps", "pattern '" + pattern.id + "'");
+    json steps = j.value("steps", json::array());
     for (const auto& stepJson : steps) {
         pattern.steps.push_back(ParseStep(stepJson, pattern.id));
     }
+
+    if (j.contains("melodies")) {
+        for (const auto& melodyJson : j["melodies"]) {
+            MelodyConfig melody = ParseMelody(melodyJson, pattern.id);
+            try {
+                std::vector<StepConfig> melodySteps = ParseNoteString(melody);
+                pattern.steps.insert(pattern.steps.end(), melodySteps.begin(), melodySteps.end());
+            } catch (const std::exception& e) {
+                throw std::runtime_error("ConfigLoader: pattern '" + pattern.id + "' melody for instrument '" +
+                                          melody.instrument + "': " + e.what());
+            }
+        }
+    }
+
     return pattern;
 }
 
@@ -167,10 +196,6 @@ CompositionConfig ConfigLoader::LoadFromString(const std::string& jsonText) {
     json tempo = RequireField(root, "tempo", "composition");
     config.tempo.bpm = RequireField(tempo, "bpm", "tempo").get<double>();
     config.tempo.beatsPerBar = tempo.value("beatsPerBar", 4);
-
-    json key = RequireField(root, "key", "composition");
-    config.key.root = RequireField(key, "root", "key").get<std::string>();
-    config.key.scale = RequireField(key, "scale", "key").get<std::string>();
 
     config.startPattern = RequireField(root, "startPattern", "composition").get<std::string>();
 

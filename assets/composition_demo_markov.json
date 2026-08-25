@@ -1,7 +1,6 @@
 {
   "sampleRate": 48000,
   "tempo": { "bpm": 120, "beatsPerBar": 4 },
-  "key": { "root": "C", "scale": "minor_pentatonic" },
   "startPattern": "pattern_a",
   "variationStrategy": "markovChain",
   "loFi": { "bitDepth": 4, "holdFactor": 4 },
@@ -43,19 +42,19 @@
       "lengthBars": 1,
       "steps": [
         { "beat": 0.0, "instrument": "kick", "velocity": 1.0 },
-        { "beat": 0.0, "instrument": "lead_synth", "degree": 0, "velocity": 0.8, "gate": 0.5 },
-        { "beat": 0.0, "instrument": "arp_pad", "degree": 0, "velocity": 0.6, "gate": 3.5 },
-        { "beat": 0.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
-        { "beat": 0.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 },
-        { "beat": 1.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
-        { "beat": 1.5, "instrument": "lead_synth", "degree": 2, "velocity": 0.7, "gate": 0.4 },
-        { "beat": 1.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 },
+        { "beat": 0.0, "instrument": "lead_synth", "note": "C", "octave": 4, "velocity": 0.8, "gate": 0.5 },
+        { "beat": 0.0, "instrument": "arp_pad", "note": "C", "octave": 4, "velocity": 0.6, "gate": 3.5 },
+        { "beat": 0.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.5 },
+        { "beat": 0.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.35 },
+        { "beat": 1.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.5 },
+        { "beat": 1.5, "instrument": "lead_synth", "note": "F", "octave": 4, "velocity": 0.7, "gate": 0.4 },
+        { "beat": 1.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.35 },
         { "beat": 2.0, "instrument": "kick", "velocity": 1.0 },
-        { "beat": 2.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
-        { "beat": 2.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 },
-        { "beat": 3.0, "instrument": "lead_synth", "degree": 4, "velocity": 0.9, "gate": 0.5 },
-        { "beat": 3.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
-        { "beat": 3.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 }
+        { "beat": 2.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.5 },
+        { "beat": 2.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.35 },
+        { "beat": 3.0, "instrument": "lead_synth", "note": "A#", "octave": 4, "velocity": 0.9, "gate": 0.5 },
+        { "beat": 3.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.5 },
+        { "beat": 3.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.35 }
       ]
     },
     {
@@ -63,17 +62,17 @@
       "lengthBars": 1,
       "steps": [
         { "beat": 0.0, "instrument": "kick", "velocity": 1.0 },
-        { "beat": 0.0, "instrument": "arp_pad", "degree": 0, "velocity": 0.6, "gate": 3.5 },
-        { "beat": 0.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
-        { "beat": 0.5, "instrument": "lead_synth", "degree": 3, "velocity": 0.6, "gate": 0.3 },
-        { "beat": 0.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 },
-        { "beat": 1.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
-        { "beat": 1.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 },
-        { "beat": 2.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
-        { "beat": 2.5, "instrument": "lead_synth", "degree": 5, "velocity": 0.8, "gate": 0.5 },
-        { "beat": 2.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 },
-        { "beat": 3.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
-        { "beat": 3.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 }
+        { "beat": 0.0, "instrument": "arp_pad", "note": "C", "octave": 4, "velocity": 0.6, "gate": 3.5 },
+        { "beat": 0.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.5 },
+        { "beat": 0.5, "instrument": "lead_synth", "note": "G", "octave": 4, "velocity": 0.6, "gate": 0.3 },
+        { "beat": 0.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.35 },
+        { "beat": 1.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.5 },
+        { "beat": 1.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.35 },
+        { "beat": 2.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.5 },
+        { "beat": 2.5, "instrument": "lead_synth", "note": "C", "octave": 5, "velocity": 0.8, "gate": 0.5 },
+        { "beat": 2.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.35 },
+        { "beat": 3.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.5 },
+        { "beat": 3.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.35 }
       ]
     }
   ],

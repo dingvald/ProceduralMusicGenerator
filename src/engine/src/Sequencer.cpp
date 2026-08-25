@@ -1,6 +1,7 @@
 #include "engine/Sequencer.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 #include "engine/AudioEngine.h"
@@ -104,11 +105,11 @@ void Sequencer::Update() {
     int beatsPerBar = m_config.tempo.beatsPerBar > 0 ? m_config.tempo.beatsPerBar : 4;
     int targetBar = static_cast<int>(currentGlobalBeat / beatsPerBar);
 
+    std::string patternBeforeVariation = m_currentPatternId;
     while (m_currentBar < targetBar) {
         int nextBar = m_currentBar + 1;
         EvaluateVariationForBar(nextBar);
         m_currentBar = nextBar;
-        m_nextStepIndex = 0;
     }
 
     const Pattern* pattern = FindPattern(m_currentPatternId);
@@ -116,9 +117,27 @@ void Sequencer::Update() {
         return;
     }
 
-    double localBeat = currentGlobalBeat - static_cast<double>(m_currentBar) * beatsPerBar;
+    if (m_currentPatternId != patternBeforeVariation) {
+        // Swapped mid-update: restart the newly active pattern cleanly from
+        // its own beat 0, rather than wherever it would land if its cycle
+        // were phase-locked to the old pattern's.
+        m_patternStartBeat = currentGlobalBeat;
+        m_nextStepIndex = 0;
+    }
 
-    while (m_nextStepIndex < pattern->steps.size() && pattern->steps[m_nextStepIndex].beatOffset <= localBeat) {
+    double patternLengthBeats = (pattern->lengthBars > 0 ? pattern->lengthBars : 1) * static_cast<double>(beatsPerBar);
+    double patternBeat = currentGlobalBeat - m_patternStartBeat;
+    if (patternBeat >= patternLengthBeats) {
+        // Completed one or more full cycles of the pattern's own length;
+        // advance the anchor by whole cycles (not to "now") so the pattern
+        // stays phase-locked to the beat grid instead of drifting.
+        double cyclesElapsed = std::floor(patternBeat / patternLengthBeats);
+        m_patternStartBeat += cyclesElapsed * patternLengthBeats;
+        patternBeat = currentGlobalBeat - m_patternStartBeat;
+        m_nextStepIndex = 0;
+    }
+
+    while (m_nextStepIndex < pattern->steps.size() && pattern->steps[m_nextStepIndex].beatOffset <= patternBeat) {
         FireStep(pattern->steps[m_nextStepIndex]);
         ++m_nextStepIndex;
     }

@@ -12,7 +12,6 @@ const char* kValidJson = R"JSON(
 {
   "sampleRate": 44100,
   "tempo": { "bpm": 100, "beatsPerBar": 4 },
-  "key": { "root": "A", "scale": "natural_minor" },
   "startPattern": "p1",
   "instruments": [
     { "id": "syn", "type": "synth", "waveform": "square", "gain": 0.5,
@@ -22,7 +21,7 @@ const char* kValidJson = R"JSON(
   "patterns": [
     { "id": "p1", "lengthBars": 1, "steps": [
       { "beat": 0.0, "instrument": "snare", "velocity": 1.0 },
-      { "beat": 1.0, "instrument": "syn", "degree": 2, "velocity": 0.6, "gate": 0.25 }
+      { "beat": 1.0, "instrument": "syn", "note": "D", "octave": 5, "velocity": 0.6, "gate": 0.25 }
     ] }
   ],
   "variationRules": [
@@ -42,8 +41,6 @@ TEST_CASE("ConfigLoader parses a full valid composition") {
     CHECK(config.sampleRate == 44100);
     CHECK(config.tempo.bpm == doctest::Approx(100.0));
     CHECK(config.tempo.beatsPerBar == 4);
-    CHECK(config.key.root == "A");
-    CHECK(config.key.scale == "natural_minor");
     CHECK(config.startPattern == "p1");
 
     REQUIRE(config.instruments.size() == 2);
@@ -57,9 +54,10 @@ TEST_CASE("ConfigLoader parses a full valid composition") {
 
     REQUIRE(config.patterns.size() == 1);
     REQUIRE(config.patterns[0].steps.size() == 2);
-    CHECK_FALSE(config.patterns[0].steps[0].hasDegree);
-    CHECK(config.patterns[0].steps[1].hasDegree);
-    CHECK(config.patterns[0].steps[1].degree == 2);
+    CHECK_FALSE(config.patterns[0].steps[0].hasNote);
+    CHECK(config.patterns[0].steps[1].hasNote);
+    CHECK(config.patterns[0].steps[1].note == NoteName::D);
+    CHECK(config.patterns[0].steps[1].octave == 5);
 
     REQUIRE(config.variationRules.size() == 1);
     REQUIRE(config.variationRules[0].options.size() == 2);
@@ -69,11 +67,29 @@ TEST_CASE("ConfigLoader parses a full valid composition") {
     CHECK(config.loFi.holdFactor == 1);
 }
 
+TEST_CASE("ConfigLoader defaults a note step's octave to 4 when omitted") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "steps": [
+        { "beat": 0.0, "instrument": "syn", "note": "A" }
+      ] } ]
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    REQUIRE(config.patterns[0].steps.size() == 1);
+    CHECK(config.patterns[0].steps[0].hasNote);
+    CHECK(config.patterns[0].steps[0].note == NoteName::A);
+    CHECK(config.patterns[0].steps[0].octave == 4);
+}
+
 TEST_CASE("ConfigLoader parses a noise-waveform synth instrument") {
     const char* json = R"JSON(
     {
       "tempo": { "bpm": 100, "beatsPerBar": 4 },
-      "key": { "root": "C", "scale": "major" },
       "startPattern": "p1",
       "instruments": [
         { "id": "hihat", "type": "synth", "waveform": "noise",
@@ -91,7 +107,6 @@ TEST_CASE("ConfigLoader parses a noise-waveform synth instrument") {
 TEST_CASE("ConfigLoader throws on missing required field") {
     const char* missingTempo = R"JSON(
     {
-      "key": { "root": "C", "scale": "major" },
       "startPattern": "p1",
       "instruments": [],
       "patterns": []
@@ -108,7 +123,6 @@ TEST_CASE("ConfigLoader parses markovChain and variationStrategy") {
     const char* json = R"JSON(
     {
       "tempo": { "bpm": 100, "beatsPerBar": 4 },
-      "key": { "root": "C", "scale": "major" },
       "startPattern": "a",
       "variationStrategy": "markovChain",
       "instruments": [],
@@ -142,7 +156,6 @@ TEST_CASE("ConfigLoader parses an explicit dutyCycle for a synth instrument") {
     const char* json = R"JSON(
     {
       "tempo": { "bpm": 100, "beatsPerBar": 4 },
-      "key": { "root": "C", "scale": "major" },
       "startPattern": "p1",
       "instruments": [
         { "id": "pulse", "type": "synth", "waveform": "square", "dutyCycle": 0.25,
@@ -161,7 +174,6 @@ TEST_CASE("ConfigLoader parses an explicit arpeggio section for a synth instrume
     const char* json = R"JSON(
     {
       "tempo": { "bpm": 100, "beatsPerBar": 4 },
-      "key": { "root": "C", "scale": "major" },
       "startPattern": "p1",
       "instruments": [
         { "id": "arp_pad", "type": "synth", "waveform": "square",
@@ -186,7 +198,6 @@ TEST_CASE("ConfigLoader parses an explicit loFi section") {
     const char* json = R"JSON(
     {
       "tempo": { "bpm": 100, "beatsPerBar": 4 },
-      "key": { "root": "C", "scale": "major" },
       "startPattern": "p1",
       "instruments": [],
       "patterns": [ { "id": "p1", "steps": [] } ],
@@ -203,11 +214,114 @@ TEST_CASE("ConfigLoader throws when variationStrategy is markovChain but markovC
     const char* json = R"JSON(
     {
       "tempo": { "bpm": 100, "beatsPerBar": 4 },
-      "key": { "root": "C", "scale": "major" },
       "startPattern": "a",
       "variationStrategy": "markovChain",
       "instruments": [],
       "patterns": [ { "id": "a", "steps": [] } ]
+    }
+    )JSON";
+    CHECK_THROWS_AS(ConfigLoader::LoadFromString(json), std::runtime_error);
+}
+
+TEST_CASE("ConfigLoader expands a melodies block into steps, with 'steps' fully optional") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "melodies": [
+        { "instrument": "lead", "notes": "A B G F#" }
+      ] } ]
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    REQUIRE(config.patterns.size() == 1);
+    const std::vector<StepConfig>& steps = config.patterns[0].steps;
+    REQUIRE(steps.size() == 4);
+    CHECK(steps[0].note == NoteName::A);
+    CHECK(steps[0].beat == doctest::Approx(0.0));
+    CHECK(steps[1].note == NoteName::B);
+    CHECK(steps[1].beat == doctest::Approx(1.0));
+    CHECK(steps[2].note == NoteName::G);
+    CHECK(steps[2].beat == doctest::Approx(2.0));
+    CHECK(steps[3].note == NoteName::Fs);
+    CHECK(steps[3].beat == doctest::Approx(3.0));
+    for (const StepConfig& step : steps) {
+        CHECK(step.instrument == "lead");
+        CHECK(step.hasNote);
+    }
+}
+
+TEST_CASE("ConfigLoader merges manual steps and melodies on the same pattern") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1",
+        "steps": [ { "beat": 0.0, "instrument": "kick", "velocity": 1.0 } ],
+        "melodies": [ { "instrument": "lead", "notes": "C D" } ]
+      } ]
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    REQUIRE(config.patterns.size() == 1);
+    CHECK(config.patterns[0].steps.size() == 3); // 1 manual + 2 melody-expanded
+}
+
+TEST_CASE("ConfigLoader applies melody field defaults and overrides") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "melodies": [
+        { "instrument": "lead", "notes": "A5 B", "startBeat": 2.0, "noteLengthBeats": 0.5, "gateFraction": 0.5 }
+      ] } ]
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    const std::vector<StepConfig>& steps = config.patterns[0].steps;
+    REQUIRE(steps.size() == 2);
+    CHECK(steps[0].octave == 5);   // explicit per-note override
+    CHECK(steps[1].octave == 4);   // falls back to defaultOctave
+    CHECK(steps[0].beat == doctest::Approx(2.0));
+    CHECK(steps[1].beat == doctest::Approx(2.5));
+    CHECK(steps[0].gate == doctest::Approx(0.25)); // 0.5 beats * 0.5 gateFraction
+}
+
+TEST_CASE("ConfigLoader throws when a melody is missing 'notes' or 'instrument'") {
+    const char* missingNotes = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "melodies": [ { "instrument": "lead" } ] } ]
+    }
+    )JSON";
+    CHECK_THROWS_AS(ConfigLoader::LoadFromString(missingNotes), std::runtime_error);
+
+    const char* missingInstrument = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "melodies": [ { "notes": "A B" } ] } ]
+    }
+    )JSON";
+    CHECK_THROWS_AS(ConfigLoader::LoadFromString(missingInstrument), std::runtime_error);
+}
+
+TEST_CASE("ConfigLoader propagates a malformed note-string as a runtime_error naming the pattern") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "melodies": [ { "instrument": "lead", "notes": "A H G" } ] } ]
     }
     )JSON";
     CHECK_THROWS_AS(ConfigLoader::LoadFromString(json), std::runtime_error);

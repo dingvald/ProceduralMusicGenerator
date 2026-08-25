@@ -9,6 +9,7 @@
 #include "engine/Envelope.h"
 #include "engine/LoFiProcessor.h"
 #include "engine/Oscillator.h"
+#include "engine/Theory.h"
 
 namespace pmg {
 
@@ -19,11 +20,6 @@ namespace pmg {
 struct TempoConfig {
     double bpm = 120.0;
     int beatsPerBar = 4;
-};
-
-struct KeyConfig {
-    std::string root = "C";
-    std::string scale = "major";
 };
 
 enum class InstrumentType { Synth, Sample };
@@ -46,16 +42,31 @@ struct InstrumentConfig {
 struct StepConfig {
     double beat = 0.0;
     std::string instrument;
-    bool hasDegree = false; // true for synth steps carrying a scale degree
-    int degree = 0;
+    bool hasNote = false;        // true for a pitched synth step; false = sample trigger
+    NoteName note = NoteName::C; // meaningful only when hasNote
+    int octave = 4;              // meaningful only when hasNote
     float velocity = 1.0f;
     float gate = 0.25f;
+};
+
+// A compact note-string melody block, expanded into StepConfig entries at
+// load time (see NoteStringParser) and merged into a pattern's steps. Lets
+// an author write "A B G F#" instead of a full step object per note.
+struct MelodyConfig {
+    std::string instrument;
+    std::string notes;            // e.g. "A B G F#"
+    double startBeat = 0.0;
+    int defaultOctave = 4;
+    double noteLengthBeats = 1.0; // default per-token slot duration, in beats
+    float gateFraction = 0.8f;    // fraction of the slot actually held before auto-release
+    float velocity = 0.8f;
 };
 
 struct PatternConfig {
     std::string id;
     int lengthBars = 1;
     std::vector<StepConfig> steps;
+    std::vector<MelodyConfig> melodies;
 };
 
 enum class VariationOptionType { NoOp, SwapPattern, SetTrackMuted };
@@ -90,7 +101,6 @@ enum class VariationStrategyKind { RuleBased, MarkovChain };
 struct CompositionConfig {
     uint32_t sampleRate = 48000;
     TempoConfig tempo;
-    KeyConfig key;
     std::string startPattern;
     std::vector<InstrumentConfig> instruments;
     std::vector<PatternConfig> patterns;
