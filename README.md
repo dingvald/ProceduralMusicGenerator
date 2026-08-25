@@ -15,6 +15,31 @@ A procedural/generative music engine written in modern C++. It supports:
 Built with [premake5](https://premake.github.io/); targets Windows via Visual Studio 2026 for
 this pass (see **Build** below for the current premake action caveat).
 
+## Design goal: lo-fi chiptune for retro games
+
+This engine's target output is **chiptune-style background music for retro-styled games** — the
+sound of 8/16-bit sound chips (NES 2A03, Game Boy, SID), not a general-purpose synth. That
+constrains which features earn a place here:
+
+- **Implementation can be modern; the sound must stay period-authentic.** PolyBLEP band-limiting
+  (already in `Oscillator`) is in scope because it shapes *how* a waveform is generated, not
+  because it should make the output sound like a clean modern synth — real chips didn't alias
+  the way a naive oscillator does either; they produced clean, simple waveforms at a coarse,
+  quantized resolution. Features that would push the sound toward a generic modern synth
+  (e.g. smooth continuous-parameter modulation, orchestral-style layering) are out of scope
+  unless they're in service of an authentically chip-like effect.
+- Favor primitives real sound chips actually had: pulse waves with a **selectable duty cycle**
+  (not just a fixed 50% square), a **noise channel** (LFSR-style) for percussion instead of only
+  sample playback, low **polyphony per channel** (chip channels rarely stacked notes — arpeggios
+  faked chords by cycling one channel's pitch quickly), and coarse **bit-depth/sample-rate**
+  quantization on the output stage.
+- The variation system (rule-based / Markov-chain pattern swapping, track muting) is squarely in
+  scope as-is — procedural arrangement variation is exactly how chiptune loops avoided feeling
+  static despite tight hardware constraints.
+
+New feature proposals should be checked against this: does it make the engine better at
+authentic-feeling chiptune, or does it just make it a better generic synth?
+
 ## Layout
 
 ```
