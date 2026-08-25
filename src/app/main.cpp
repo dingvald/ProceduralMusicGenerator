@@ -1,6 +1,7 @@
 #include <chrono>
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <random>
 #include <string>
 #include <thread>
@@ -8,6 +9,7 @@
 
 #include "engine/AudioEngine.h"
 #include "engine/ConfigLoader.h"
+#include "engine/MarkovChainVariationStrategy.h"
 #include "engine/Mixer.h"
 #include "engine/Pattern.h"
 #include "engine/RandomSource.h"
@@ -20,9 +22,13 @@ int main(int argc, char** argv) {
     using namespace pmg;
 
     bool useNullBackend = false;
+    std::string configPath = "composition_demo.json";
     for (int i = 1; i < argc; ++i) {
-        if (std::string(argv[i]) == "--null-audio") {
+        std::string arg = argv[i];
+        if (arg == "--null-audio") {
             useNullBackend = true;
+        } else {
+            configPath = arg;
         }
     }
 
@@ -32,9 +38,9 @@ int main(int argc, char** argv) {
 
     CompositionConfig config;
     try {
-        config = ConfigLoader::LoadFromFile("composition_demo.json");
+        config = ConfigLoader::LoadFromFile(configPath);
     } catch (const std::exception& e) {
-        std::cerr << "Failed to load composition_demo.json: " << e.what() << "\n";
+        std::cerr << "Failed to load " << configPath << ": " << e.what() << "\n";
         return 1;
     }
 
@@ -78,13 +84,18 @@ int main(int argc, char** argv) {
         }
     }
 
+    std::unique_ptr<IVariationStrategy> variationStrategy;
+    if (config.variationStrategy == VariationStrategyKind::MarkovChain) {
+        variationStrategy = std::make_unique<MarkovChainVariationStrategy>(config.markovChain);
+    }
+
     RandomSource randomSource(std::random_device{}());
-    VariationEngine variationEngine(config.variationRules);
+    VariationEngine variationEngine(config.variationRules, std::move(variationStrategy));
     Sequencer sequencer(audioEngine, variationEngine, randomSource, config, std::move(patterns));
     sequencer.SetVariationLogCallback([](const std::string& message) { std::cout << message << "\n"; });
 
     audioEngine.Start();
-    std::cout << "Playing composition_demo.json. Press Ctrl+C to stop.\n";
+    std::cout << "Playing " << configPath << ". Press Ctrl+C to stop.\n";
 
     while (true) {
         sequencer.Update();

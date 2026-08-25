@@ -35,6 +35,12 @@ VariationOptionType ParseVariationOptionType(const std::string& name) {
     throw std::runtime_error("ConfigLoader: unknown variation option type '" + name + "'");
 }
 
+VariationStrategyKind ParseVariationStrategyKind(const std::string& name) {
+    if (name == "ruleBased") return VariationStrategyKind::RuleBased;
+    if (name == "markovChain") return VariationStrategyKind::MarkovChain;
+    throw std::runtime_error("ConfigLoader: unknown variationStrategy '" + name + "'");
+}
+
 InstrumentConfig ParseInstrument(const json& j) {
     InstrumentConfig inst;
     inst.id = RequireField(j, "id", "instrument").get<std::string>();
@@ -117,6 +123,27 @@ VariationRuleConfig ParseVariationRule(const json& j) {
     return rule;
 }
 
+MarkovChainConfig ParseMarkovChain(const json& j) {
+    MarkovChainConfig chain;
+    json transitions = RequireField(j, "patternTransitions", "markovChain");
+
+    for (auto it = transitions.begin(); it != transitions.end(); ++it) {
+        const std::string& fromPattern = it.key();
+        std::vector<MarkovTransitionConfig> outgoing;
+        for (const auto& transitionJson : it.value()) {
+            MarkovTransitionConfig transition;
+            transition.toPattern =
+                RequireField(transitionJson, "pattern", "markovChain transition from '" + fromPattern + "'")
+                    .get<std::string>();
+            transition.weight = transitionJson.value("weight", 1.0f);
+            outgoing.push_back(transition);
+        }
+        chain[fromPattern] = std::move(outgoing);
+    }
+
+    return chain;
+}
+
 } // namespace
 
 CompositionConfig ConfigLoader::LoadFromString(const std::string& jsonText) {
@@ -149,6 +176,19 @@ CompositionConfig ConfigLoader::LoadFromString(const std::string& jsonText) {
         for (const auto& ruleJson : root["variationRules"]) {
             config.variationRules.push_back(ParseVariationRule(ruleJson));
         }
+    }
+
+    if (root.contains("variationStrategy")) {
+        config.variationStrategy = ParseVariationStrategyKind(root["variationStrategy"].get<std::string>());
+    }
+
+    if (root.contains("markovChain")) {
+        config.markovChain = ParseMarkovChain(root["markovChain"]);
+    }
+
+    if (config.variationStrategy == VariationStrategyKind::MarkovChain && config.markovChain.empty()) {
+        throw std::runtime_error(
+            "ConfigLoader: variationStrategy is 'markovChain' but no 'markovChain.patternTransitions' were provided");
     }
 
     return config;

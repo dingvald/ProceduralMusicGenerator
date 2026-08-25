@@ -60,6 +60,8 @@ TEST_CASE("ConfigLoader parses a full valid composition") {
 
     REQUIRE(config.variationRules.size() == 1);
     REQUIRE(config.variationRules[0].options.size() == 2);
+    CHECK(config.variationStrategy == VariationStrategyKind::RuleBased);
+    CHECK(config.markovChain.empty());
 }
 
 TEST_CASE("ConfigLoader throws on missing required field") {
@@ -76,4 +78,52 @@ TEST_CASE("ConfigLoader throws on missing required field") {
 
 TEST_CASE("ConfigLoader throws on malformed JSON") {
     CHECK_THROWS(ConfigLoader::LoadFromString("{ not valid json"));
+}
+
+TEST_CASE("ConfigLoader parses markovChain and variationStrategy") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "key": { "root": "C", "scale": "major" },
+      "startPattern": "a",
+      "variationStrategy": "markovChain",
+      "instruments": [],
+      "patterns": [
+        { "id": "a", "steps": [] },
+        { "id": "b", "steps": [] }
+      ],
+      "markovChain": {
+        "patternTransitions": {
+          "a": [
+            { "pattern": "a", "weight": 0.3 },
+            { "pattern": "b", "weight": 0.7 }
+          ]
+        }
+      }
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    CHECK(config.variationStrategy == VariationStrategyKind::MarkovChain);
+
+    REQUIRE(config.markovChain.count("a") == 1);
+    REQUIRE(config.markovChain.at("a").size() == 2);
+    CHECK(config.markovChain.at("a")[0].toPattern == "a");
+    CHECK(config.markovChain.at("a")[0].weight == doctest::Approx(0.3));
+    CHECK(config.markovChain.at("a")[1].toPattern == "b");
+    CHECK(config.markovChain.at("a")[1].weight == doctest::Approx(0.7));
+}
+
+TEST_CASE("ConfigLoader throws when variationStrategy is markovChain but markovChain is missing") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "key": { "root": "C", "scale": "major" },
+      "startPattern": "a",
+      "variationStrategy": "markovChain",
+      "instruments": [],
+      "patterns": [ { "id": "a", "steps": [] } ]
+    }
+    )JSON";
+    CHECK_THROWS_AS(ConfigLoader::LoadFromString(json), std::runtime_error);
 }

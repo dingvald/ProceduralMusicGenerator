@@ -4,11 +4,13 @@ A procedural/generative music engine written in modern C++. It supports:
 
 - **Procedural synth playback** — oscillator (sine/saw/square/triangle) + ADSR envelope voices.
 - **Sample playback** — WAV samples decoded and triggered alongside synth voices.
-- **Real-time dynamic variation** — a rule-based, weighted-random engine that can swap patterns
-  and mute/unmute tracks live, on a pluggable strategy interface so a Markov-chain-based
-  generator can be added later without touching the sequencer.
-- **JSON-driven composition** — tempo, key/scale, instruments, patterns, and variation rules are
-  all defined in a JSON file loaded at startup (see `assets/composition_demo.json`).
+- **Real-time dynamic variation** — a pluggable `IVariationStrategy` behind `VariationEngine`
+  decides pattern swaps and track mutes live. Two implementations ship: a rule-based,
+  weighted-random strategy, and a **Markov-chain strategy** that samples the next pattern from a
+  weighted transition table keyed by the pattern currently playing.
+- **JSON-driven composition** — tempo, key/scale, instruments, patterns, and variation rules (or a
+  Markov transition table) are all defined in a JSON file loaded at startup (see
+  `assets/composition_demo.json` and `assets/composition_demo_markov.json`).
 
 Built with [premake5](https://premake.github.io/); targets Windows via Visual Studio 2026 for
 this pass (see **Build** below for the current premake action caveat).
@@ -22,7 +24,7 @@ src/engine/include/engine  Engine public headers
 src/engine/src             Engine implementation
 src/app/main.cpp           Demo console app
 tests/                     doctest unit tests
-assets/                    composition_demo.json + samples/kick.wav (used by DemoApp)
+assets/                    composition_demo*.json + samples/kick.wav (used by DemoApp)
 ```
 
 See `third_party/THIRD_PARTY_NOTICES.md` for exact vendored versions/licenses.
@@ -79,10 +81,12 @@ compatibility/retargeting, and audible confirmation of synth + sample + variatio
 
 `DemoApp` accepts a `--null-audio` flag that forces miniaudio's null backend, so the full
 pipeline (config load, sample decode, device open/start/stop, sequencing, variation) can be
-exercised without real audio hardware:
+exercised without real audio hardware. It also accepts an optional composition JSON path
+(defaults to `composition_demo.json`):
 
 ```
 DemoApp --null-audio
+DemoApp composition_demo_markov.json --null-audio
 ```
 
 ### Running the tests
@@ -99,14 +103,44 @@ and an occasional kick mute). Degree-based synth steps (`"degree"`) are resolved
 composition's `key`/`scale` once at load time via `Theory::DegreeToFrequency`; steps without a
 `"degree"` field are treated as sample triggers.
 
+An optional top-level `"variationStrategy"` field selects which `IVariationStrategy` `main.cpp`
+constructs: `"ruleBased"` (default — reads `"variationRules"`) or `"markovChain"` (reads
+`"markovChain"`). See `assets/composition_demo_markov.json` for a worked Markov example, using the
+same patterns/instruments as the rule-based demo:
+
+```json
+"variationStrategy": "markovChain",
+"markovChain": {
+  "patternTransitions": {
+    "pattern_a": [
+      { "pattern": "pattern_a", "weight": 0.5 },
+      { "pattern": "pattern_b", "weight": 0.5 }
+    ],
+    "pattern_b": [
+      { "pattern": "pattern_a", "weight": 0.8 },
+      { "pattern": "pattern_b", "weight": 0.2 }
+    ]
+  }
+}
+```
+
+Each key in `"patternTransitions"` is a source pattern id; its array is a weighted list of
+possible next patterns (weights need not sum to 1). A pattern with no entry, or whose sampled
+next pattern equals the current one, simply keeps playing. `ConfigLoader` throws if
+`"variationStrategy"` is `"markovChain"` but no `"markovChain.patternTransitions"` is provided.
+
 ## Architecture notes
 
 - **Threading**: the audio callback thread (real-time, miniaudio) and the control thread (`main`,
   driving `Sequencer`/`VariationEngine`) communicate only through `ParameterBus`, a lock-free
   SPSC command queue — see `src/engine/include/engine/ParameterBus.h`.
 - **Variation seam**: `IVariationStrategy` is the pluggable interface behind `VariationEngine`.
-  `RuleBasedVariationStrategy` (weighted-random per rule) is the only implementation shipped now;
-  a future `MarkovChainVariationStrategy` can be swapped in via `VariationEngine`'s constructor
-  with no changes to `Sequencer` or `VariationEngine` itself.
+  Two implementations ship: `RuleBasedVariationStrategy` (weighted-random per rule; the default)
+  and `MarkovChainVariationStrategy` (weighted transition table keyed by current pattern id).
+  `main.cpp` selects between them based on the composition's `"variationStrategy"` field and
+  passes the chosen strategy into `VariationEngine`'s constructor — `Sequencer` and
+  `VariationEngine` itself need no changes to support a strategy swap, which is the seam's whole
+  point. A further strategy (e.g. weighted by musical tension, or driven by an external signal)
+  can be added the same way.
 - **Engine is a static lib**, not header-only, so `miniaudio.h`'s implementation
   (`MINIAUDIO_IMPLEMENTATION`) is compiled exactly once, in `src/engine/src/miniaudio_impl.cpp`.

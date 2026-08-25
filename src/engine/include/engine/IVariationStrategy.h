@@ -21,11 +21,12 @@ struct VariationDecision {
     bool boolValue = false; // muted state (SetTrackMuted)
 };
 
-// Pluggable variation-decision seam. RuleBasedVariationStrategy (weighted
-// random per rule) is the only implementation shipped in v1. A future
-// MarkovChainVariationStrategy can be constructed and passed into
-// VariationEngine instead with no changes needed here or in Sequencer —
-// this interface is the intended swap point for that.
+// Pluggable variation-decision seam. Two implementations ship:
+// RuleBasedVariationStrategy (weighted random per rule) and
+// MarkovChainVariationStrategy (weighted transition table keyed by the
+// current pattern id). Either can be constructed and passed into
+// VariationEngine with no changes needed here or in Sequencer — this
+// interface is the swap point that makes that possible.
 class IVariationStrategy {
 public:
     virtual ~IVariationStrategy() = default;

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "engine/Envelope.h"
@@ -68,6 +69,20 @@ struct VariationRuleConfig {
     std::vector<VariationOptionConfig> options;
 };
 
+// One weighted outgoing edge in a Markov chain over pattern identity.
+struct MarkovTransitionConfig {
+    std::string toPattern;
+    float weight = 1.0f;
+};
+
+// Keyed by source pattern id -> its weighted outgoing transitions.
+using MarkovChainConfig = std::unordered_map<std::string, std::vector<MarkovTransitionConfig>>;
+
+// Selects which IVariationStrategy implementation VariationEngine should be
+// constructed with. RuleBased is the default (backward-compatible with
+// compositions that only define "variationRules").
+enum class VariationStrategyKind { RuleBased, MarkovChain };
+
 struct CompositionConfig {
     uint32_t sampleRate = 48000;
     TempoConfig tempo;
@@ -75,7 +90,9 @@ struct CompositionConfig {
     std::string startPattern;
     std::vector<InstrumentConfig> instruments;
     std::vector<PatternConfig> patterns;
-    std::vector<VariationRuleConfig> variationRules;
+    VariationStrategyKind variationStrategy = VariationStrategyKind::RuleBased;
+    std::vector<VariationRuleConfig> variationRules; // used when variationStrategy == RuleBased
+    MarkovChainConfig markovChain;                   // used when variationStrategy == MarkovChain
 };
 
 } // namespace pmg
