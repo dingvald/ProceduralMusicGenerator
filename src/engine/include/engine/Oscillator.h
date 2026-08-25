@@ -6,8 +6,9 @@ namespace pmg {
 
 enum class Waveform { Sine, Saw, Square, Triangle };
 
-// Naive (non-band-limited) phase-accumulator oscillator. Aliasing at high
-// frequencies is a known v1 limitation; PolyBLEP band-limiting is deferred.
+// Phase-accumulator oscillator. Saw/square/triangle edges are band-limited
+// with PolyBLEP correction to suppress aliasing near discontinuities; sine
+// needs no correction since it has none.
 // Audio-thread safe: no allocation, no locking.
 class Oscillator {
 public:
@@ -19,10 +20,14 @@ public:
     float NextSample();
 
 private:
+    static double PolyBlep(double t, double phaseIncrement);
+    double BandlimitedSquare(double phaseIncrement) const;
+
     uint32_t m_sampleRate = 48000;
     float m_frequency = 440.0f;
     Waveform m_waveform = Waveform::Sine;
     double m_phase = 0.0; // normalized [0, 1)
+    double m_triangleIntegratorState = 0.0;
 };
 
 } // namespace pmg
