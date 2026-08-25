@@ -41,7 +41,7 @@ struct Command {
     FixedId id;               // instrument id (NoteOn/TriggerSample) or track id (mute/gain)
     float floatValue = 0.0f;  // frequency (NoteOn), gain (TriggerSample/SetTrackGain)
     float floatValue2 = 0.0f; // velocity (NoteOn)
-    int intValue = 0;         // voice handle (NoteOff)
+    int intValue = 0;         // voice handle (NoteOff); gate duration in samples (NoteOn)
     bool boolValue = false;   // muted flag (SetTrackMuted)
 };
 

@@ -220,15 +220,18 @@ output unquantized, matching pre-`LoFiProcessor` behavior.
   retriggered noise instrument (e.g. a hi-hat hit repeatedly) doesn't replay an identical
   pseudo-random sequence every time — the LFSR free-runs continuously off its own clock, like real
   hardware's noise generator does, independent of note triggers.
-- **One-shot envelopes free their voice on their own**: nothing in the engine currently sends
-  `NoteOff` based on a step's `"gate"` duration — the field is parsed but not yet wired to a
-  scheduled release (a known, pre-existing gap; fixing it properly needs a way to route `NoteOff`
-  by instrument id rather than by voice handle, since the control thread that would schedule it
-  never learns which handle the audio thread assigned). What *is* handled: `Envelope`'s `Decay`
-  stage transitions straight to `Idle` (instead of holding in `Sustain`) when `"sustain"` is `0`,
-  so a percussive one-shot instrument's voice is freed back to `Mixer`'s pool as soon as it
-  finishes decaying, with no `NoteOff` required — this is what makes the noise-channel hi-hat (and
-  any other zero-sustain instrument) usable for a real, ongoing performance rather than
-  permanently leaking a voice slot per hit. A synth instrument with a nonzero sustain level (e.g.
-  `lead_synth`) still holds its voice indefinitely once triggered, since it's still relying on a
-  `NoteOff` that never comes.
+- **Gate-based auto-release**: a step's `"gate"` (a fraction of a beat) is converted by
+  `Sequencer::FireStep` into a sample count and carried on the `NoteOn` command itself
+  (`Command::intValue` — reused for this rather than adding a field, since it's otherwise only
+  meaningful on `NoteOff`). `SynthVoice` counts those samples down and calls the envelope's
+  `NoteOff()` itself once they elapse, entirely on the audio thread. This sidesteps a real
+  constraint: the control thread that fires a step never learns which voice handle `Mixer`
+  assigned it (that only exists on the audio thread, after the command is drained), so a
+  *separately scheduled* `NoteOff` command could never target the right voice — baking the
+  duration into the `NoteOn` itself avoids needing to route one by instrument id at all. Passing
+  no gate duration (the default, `-1`) holds a voice until an explicit `NoteOff` instead, e.g. for
+  a note with indefinite/manual duration.
+- **One-shot (zero-sustain) envelopes free their voice even faster**: independent of the above,
+  `Envelope`'s `Decay` stage transitions straight to `Idle` (instead of holding in `Sustain`) when
+  `"sustain"` is `0`, so a percussive one-shot instrument's voice is freed as soon as it finishes
+  decaying — typically well before its gate would even elapse.

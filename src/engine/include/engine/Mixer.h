@@ -43,8 +43,11 @@ public:
     void AddSampleInstrument(const InstrumentId& id, const SampleInstrumentDef& def);
 
     // Returns a voice handle (>=0), or -1 if the instrument is unknown,
-    // muted, or the voice pool is exhausted (note dropped).
-    int NoteOn(const InstrumentId& instrument, float frequencyHz, float velocity);
+    // muted, or the voice pool is exhausted (note dropped). gateDurationSamples,
+    // if >= 0, auto-releases the voice (as if NoteOff had been called) once
+    // that many samples have been rendered; -1 (the default) holds the note
+    // until an explicit NoteOff instead, matching pre-gate-support behavior.
+    int NoteOn(const InstrumentId& instrument, float frequencyHz, float velocity, int gateDurationSamples = -1);
     void NoteOff(int voiceHandle);
 
     // No-op if the instrument is unknown, muted, or the sample-player pool

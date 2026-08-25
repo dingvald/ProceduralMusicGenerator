@@ -89,7 +89,7 @@ void AudioEngine::RenderFrames(float* output, uint32_t frameCount) {
     while (m_parameterBus.Pop(command)) {
         switch (command.type) {
             case CommandType::NoteOn:
-                m_mixer.NoteOn(command.id.ToString(), command.floatValue, command.floatValue2);
+                m_mixer.NoteOn(command.id.ToString(), command.floatValue, command.floatValue2, command.intValue);
                 break;
             case CommandType::NoteOff:
                 m_mixer.NoteOff(command.intValue);

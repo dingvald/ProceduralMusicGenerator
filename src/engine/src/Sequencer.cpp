@@ -1,5 +1,6 @@
 #include "engine/Sequencer.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "engine/AudioEngine.h"
@@ -46,6 +47,15 @@ void Sequencer::FireStep(const ResolvedStep& step) {
         command.type = CommandType::NoteOn;
         command.floatValue = step.frequencyHz;
         command.floatValue2 = step.velocity;
+
+        // step.gate is a fraction of a beat; convert to a sample count so
+        // the voice can auto-release itself with no further scheduling from
+        // this (control) thread -- the audio thread never learns which
+        // voice handle a NoteOn was assigned, so a separately-scheduled
+        // NoteOff command could not target the right voice anyway.
+        double secondsPerBeat = 60.0 / m_config.tempo.bpm;
+        double gateDurationSamples = step.gate * secondsPerBeat * m_audioEngine.GetSampleRate();
+        command.intValue = std::max(1, static_cast<int>(gateDurationSamples));
     } else {
         command.type = CommandType::TriggerSample;
         command.floatValue = step.velocity;

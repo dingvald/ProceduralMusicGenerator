@@ -43,6 +43,34 @@ TEST_CASE("Mixer plays a synth note and settles to silence after release") {
     CHECK(handle2 >= 0);
 }
 
+TEST_CASE("Mixer NoteOn with a gate duration auto-releases and frees its voice without an explicit NoteOff") {
+    Mixer mixer;
+    const uint32_t sampleRate = 1000;
+    mixer.Configure(sampleRate);
+
+    SynthInstrumentDef def;
+    def.waveform = Waveform::Sine;
+    def.envelope.attackSec = 0.005f;
+    def.envelope.decaySec = 0.005f;
+    def.envelope.sustainLevel = 0.8f;
+    def.envelope.releaseSec = 0.005f;
+    def.gain = 1.0f;
+    mixer.AddSynthInstrument("test_synth", def);
+
+    const int gateDurationSamples = 15;
+    int handle = mixer.NoteOn("test_synth", 100.0f, 1.0f, gateDurationSamples);
+    CHECK(handle >= 0);
+
+    // No NoteOff() call anywhere in this test: render well past gate +
+    // release and confirm the voice freed itself and is reusable.
+    for (int i = 0; i < 60; ++i) {
+        mixer.RenderNextSample();
+    }
+
+    int handle2 = mixer.NoteOn("test_synth", 100.0f, 1.0f);
+    CHECK(handle2 >= 0);
+}
+
 TEST_CASE("Mixer drops NoteOn for an unknown instrument") {
     Mixer mixer;
     mixer.Configure(1000);

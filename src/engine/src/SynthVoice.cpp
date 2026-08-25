@@ -9,12 +9,13 @@ void SynthVoice::Configure(uint32_t sampleRate, Waveform waveform, float dutyCyc
     m_envelope.Configure(envelopeParams, sampleRate);
 }
 
-void SynthVoice::NoteOn(float frequencyHz, float velocity) {
+void SynthVoice::NoteOn(float frequencyHz, float velocity, int gateDurationSamples) {
     m_oscillator.SetFrequency(frequencyHz);
     m_oscillator.Reset();
     m_envelope.NoteOn();
     m_velocity = velocity;
     m_hasNote = true;
+    m_samplesUntilRelease = gateDurationSamples;
 }
 
 void SynthVoice::NoteOff() {
@@ -24,6 +25,13 @@ void SynthVoice::NoteOff() {
 float SynthVoice::RenderSample() {
     if (!m_hasNote) {
         return 0.0f;
+    }
+
+    if (m_samplesUntilRelease == 0) {
+        m_envelope.NoteOff();
+        --m_samplesUntilRelease; // step below zero so this doesn't refire every sample
+    } else if (m_samplesUntilRelease > 0) {
+        --m_samplesUntilRelease;
     }
 
     float sample = m_oscillator.NextSample() * m_envelope.NextSample() * m_velocity;
