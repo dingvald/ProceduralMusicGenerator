@@ -328,13 +328,14 @@ file at `assets/composition_demo_full.json` (verified against `ConfigLoader` and
 copy-paste a starting point.
 
 For a composition that *is* meant to sound good, see `assets/composition_battle_theme.json` — a
-176 BPM Pokemon-R/B-style battle theme (`intro` into a dense eighth-note-driven `main_riff`, with a
-sparser two-bar `bridge` moving from D minor to a Bb major color for contrast). Its Markov chain
-gives `main_riff` an 85% chance per bar to keep looping and a 15% chance to duck into `bridge`,
-and gives `bridge` a 70% chance per bar to keep playing (so it usually completes its own two-bar
-phrase, sometimes repeating it, before returning) against a 30% chance to head back to `main_riff`.
-Render it to a WAV to hear it: `DemoApp composition_battle_theme.json --render-wav battle.wav
---seconds 40`.
+176 BPM Pokemon-R/B-style battle theme (`intro` into a dense eighth-note-driven `main_riff`, an
+alternate-melody sibling `main_riff_b` sharing the same chords/bass/percussion but a different lead
+line and kick-fill placement, and a sparser two-bar `bridge` moving from D minor to a Bb major color
+for contrast). Its Markov chain lets `main_riff` and `main_riff_b` each favor themselves (50% per
+bar) but frequently hand off to one another (35%) or duck into `bridge` (15%), and gives `bridge` a
+70% chance per bar to keep playing (so it usually completes its own two-bar phrase, sometimes
+repeating it, before returning to one of the two riff variants). Render it to a WAV to hear it:
+`DemoApp composition_battle_theme.json --render-wav battle.wav --seconds 120`.
 
 ```jsonc
 {
