@@ -2,16 +2,19 @@
 
 #include <cstdint>
 
+#include "engine/Arpeggiator.h"
 #include "engine/Envelope.h"
 #include "engine/Oscillator.h"
 
 namespace pmg {
 
-// One synth voice: an oscillator gated by an ADSR envelope. Audio-thread
+// One synth voice: an oscillator gated by an ADSR envelope, with an
+// optional Arpeggiator modulating its frequency while held. Audio-thread
 // safe; Mixer owns a fixed pool of these and reuses inactive slots.
 class SynthVoice {
 public:
-    void Configure(uint32_t sampleRate, Waveform waveform, float dutyCycle, const ADSRParams& envelopeParams);
+    void Configure(uint32_t sampleRate, Waveform waveform, float dutyCycle, const ArpeggioConfig& arpeggioConfig,
+                   const ADSRParams& envelopeParams);
 
     // gateDurationSamples, if >= 0, auto-releases the note (equivalent to
     // calling NoteOff) once that many samples have been rendered; -1 (the
@@ -25,6 +28,8 @@ public:
 private:
     Oscillator m_oscillator;
     Envelope m_envelope;
+    Arpeggiator m_arpeggiator;
+    float m_baseFrequency = 440.0f;
     float m_velocity = 1.0f;
     bool m_hasNote = false;
     int m_samplesUntilRelease = -1; // < 0: no scheduled auto-release

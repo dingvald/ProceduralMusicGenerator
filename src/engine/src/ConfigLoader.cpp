@@ -53,6 +53,16 @@ InstrumentConfig ParseInstrument(const json& j) {
         inst.waveform = ParseWaveform(
             RequireField(j, "waveform", "synth instrument '" + inst.id + "'").get<std::string>());
         inst.dutyCycle = j.value("dutyCycle", 0.5f);
+
+        auto arpIt = j.find("arpeggio");
+        if (arpIt != j.end()) {
+            json semitones = RequireField(*arpIt, "semitones", "arpeggio for instrument '" + inst.id + "'");
+            for (const auto& semitoneJson : semitones) {
+                inst.arpeggio.semitoneOffsets.push_back(semitoneJson.get<int>());
+            }
+            inst.arpeggio.rateHz = arpIt->value("rateHz", 20.0f);
+        }
+
         json env = RequireField(j, "envelope", "synth instrument '" + inst.id + "'");
         inst.envelope.attackSec = env.value("attack", 0.01f);
         inst.envelope.decaySec = env.value("decay", 0.1f);

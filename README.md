@@ -19,6 +19,9 @@ A procedural/generative music engine written in modern C++. It supports:
 - **Lo-fi output stage** — an optional post-mix `LoFiProcessor` quantizes amplitude to a coarse
   bit depth and/or holds samples across a configurable window (naive, unfiltered downsampling),
   emulating a real chip's low-resolution DAC instead of a clean modern one.
+- **Arpeggiator** — an optional per-instrument `Arpeggiator` cycles a held note's pitch through a
+  list of semitone offsets at a fixed rate, faking a chord on a single channel — the standard way
+  chip music implied harmony despite hardware with only 1-3 melodic voices.
 
 Built with [premake5](https://premake.github.io/); targets Windows via Visual Studio 2026 for
 this pass (see **Build** below for the current premake action caveat).
@@ -39,9 +42,8 @@ constrains which features earn a place here:
 - Favor primitives real sound chips actually had: pulse waves with a **selectable duty cycle**
   (shipped — `Oscillator::SetDutyCycle`), coarse **bit-depth/sample-hold quantization** on the
   output stage (shipped — `LoFiProcessor`), an LFSR **noise channel** for percussion instead of
-  only sample playback (shipped — `Waveform::Noise`), and low **polyphony per channel** (chip
-  channels rarely stacked notes — arpeggios faked chords by cycling one channel's pitch quickly;
-  not yet built).
+  only sample playback (shipped — `Waveform::Noise`), and low polyphony per channel faked into a
+  chord via a fast single-channel **arpeggio** (shipped — `Arpeggiator`).
 - The variation system (rule-based / Markov-chain pattern swapping, track muting) is squarely in
   scope as-is — procedural arrangement variation is exactly how chiptune loops avoided feeling
   static despite tight hardware constraints.
@@ -132,10 +134,12 @@ directory containing `composition_demo.json`, since one test loads it indirectly
 ## Composition JSON
 
 See `assets/composition_demo.json` for a worked example: two one-bar patterns, a 25%-duty pulse
-synth lead instrument, a sample-based kick instrument, a noise-channel hi-hat instrument, and two
-variation rules (a per-bar pattern swap and an occasional kick mute). Degree-based synth steps
-(`"degree"`) are resolved against the composition's `key`/`scale` once at load time via
-`Theory::DegreeToFrequency`; steps without a `"degree"` field are treated as sample triggers.
+synth lead instrument, a sample-based kick instrument, a noise-channel hi-hat instrument, an
+arpeggiated chordal pad instrument, and two variation rules (a per-bar pattern swap and an
+occasional kick mute). Degree-based synth steps (`"degree"`) are resolved against the
+composition's `key`/`scale` once at load time via `Theory::DegreeToFrequency`; steps without a
+`"degree"` field are treated as sample triggers. A synth step's `"gate"` (fraction of a beat,
+default `0.25`) is how long the note is held before it's auto-released.
 
 A synth instrument with `"waveform": "noise"` has no real pitch — its `"degree"` instead selects
 an LFSR clock rate via the same scale/root resolution as a pitched instrument (a high degree gives
@@ -150,6 +154,18 @@ default `0.5`), matching a chip pulse channel's duty setting — e.g. `0.125`, `
 `0.75` are the four duty cycles NES pulse channels support, each with a distinct timbre at the
 same pitch. It's ignored for other waveforms; `Waveform::Triangle` always integrates a fixed 50%
 pulse internally regardless of this field, since a chip's triangle channel has no duty control.
+
+A synth instrument accepts an optional `"arpeggio"` field:
+
+```json
+"arpeggio": { "semitones": [0, 3, 7], "rateHz": 16 }
+```
+
+While a note is held, the voice's frequency cycles through `"semitones"` (offsets from the note's
+base pitch, restarting from the first offset on every new note) at `"rateHz"` steps per second —
+`assets/composition_demo.json`'s `arp_pad` instrument uses this to imply a minor triad on a single
+channel. Omitting `"arpeggio"` (or an empty `"semitones"` list) disables it, leaving the voice at
+its plain triggered pitch.
 
 An optional top-level `"variationStrategy"` field selects which `IVariationStrategy` `main.cpp`
 constructs: `"ruleBased"` (default — reads `"variationRules"`) or `"markovChain"` (reads
@@ -235,3 +251,9 @@ output unquantized, matching pre-`LoFiProcessor` behavior.
   `Envelope`'s `Decay` stage transitions straight to `Idle` (instead of holding in `Sustain`) when
   `"sustain"` is `0`, so a percussive one-shot instrument's voice is freed as soon as it finishes
   decaying — typically well before its gate would even elapse.
+- **Arpeggiator**: `SynthVoice` recomputes its oscillator's frequency every sample as
+  `baseFrequency * Arpeggiator::NextMultiplier()`, where the multiplier is `2^(semitoneOffset/12)`
+  for whichever offset the arpeggio is currently on. `NoteOn()` resets the arpeggio to its first
+  offset (not wherever a prior note's cycle left off), matching how chip trackers restart an arp
+  per note. With no configured offsets, `NextMultiplier()` always returns `1.0`, so an
+  unarpeggiated voice's frequency math is unchanged.

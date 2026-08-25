@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "engine/Arpeggiator.h"
 #include "engine/Envelope.h"
 #include "engine/Oscillator.h"
 #include "engine/SampleAsset.h"
@@ -18,6 +19,7 @@ using InstrumentId = std::string;
 struct SynthInstrumentDef {
     Waveform waveform = Waveform::Sine;
     float dutyCycle = 0.5f; // only meaningful for Waveform::Square
+    ArpeggioConfig arpeggio;
     ADSRParams envelope;
     float gain = 1.0f;
 };

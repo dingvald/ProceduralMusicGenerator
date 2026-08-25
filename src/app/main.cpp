@@ -70,6 +70,7 @@ int main(int argc, char** argv) {
             SynthInstrumentDef def;
             def.waveform = instrument.waveform;
             def.dutyCycle = instrument.dutyCycle;
+            def.arpeggio = instrument.arpeggio;
             def.envelope = instrument.envelope;
             def.gain = instrument.gain;
             mixer.AddSynthInstrument(instrument.id, def);

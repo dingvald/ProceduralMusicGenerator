@@ -26,6 +26,15 @@
       "waveform": "noise",
       "gain": 0.3,
       "envelope": { "attack": 0.001, "decay": 0.04, "sustain": 0.0, "release": 0.01 }
+    },
+    {
+      "id": "arp_pad",
+      "type": "synth",
+      "waveform": "square",
+      "dutyCycle": 0.5,
+      "arpeggio": { "semitones": [0, 3, 7], "rateHz": 16 },
+      "gain": 0.18,
+      "envelope": { "attack": 0.02, "decay": 0.1, "sustain": 0.5, "release": 0.15 }
     }
   ],
   "patterns": [
@@ -35,6 +44,7 @@
       "steps": [
         { "beat": 0.0, "instrument": "kick", "velocity": 1.0 },
         { "beat": 0.0, "instrument": "lead_synth", "degree": 0, "velocity": 0.8, "gate": 0.5 },
+        { "beat": 0.0, "instrument": "arp_pad", "degree": 0, "velocity": 0.6, "gate": 3.5 },
         { "beat": 0.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
         { "beat": 0.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 },
         { "beat": 1.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
@@ -53,6 +63,7 @@
       "lengthBars": 1,
       "steps": [
         { "beat": 0.0, "instrument": "kick", "velocity": 1.0 },
+        { "beat": 0.0, "instrument": "arp_pad", "degree": 0, "velocity": 0.6, "gate": 3.5 },
         { "beat": 0.0, "instrument": "hihat", "degree": 20, "velocity": 0.5 },
         { "beat": 0.5, "instrument": "lead_synth", "degree": 3, "velocity": 0.6, "gate": 0.3 },
         { "beat": 0.5, "instrument": "hihat", "degree": 20, "velocity": 0.35 },

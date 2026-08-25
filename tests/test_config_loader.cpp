@@ -1,4 +1,5 @@
 #include <stdexcept>
+#include <vector>
 
 #include "doctest/doctest.h"
 #include "engine/ConfigLoader.h"
@@ -50,6 +51,7 @@ TEST_CASE("ConfigLoader parses a full valid composition") {
     CHECK(config.instruments[0].type == InstrumentType::Synth);
     CHECK(config.instruments[0].waveform == Waveform::Square);
     CHECK(config.instruments[0].dutyCycle == doctest::Approx(0.5)); // not set in kValidJson -> default
+    CHECK(config.instruments[0].arpeggio.semitoneOffsets.empty()); // not set -> disabled
     CHECK(config.instruments[1].type == InstrumentType::Sample);
     CHECK(config.instruments[1].file == "samples/snare.wav");
 
@@ -153,6 +155,31 @@ TEST_CASE("ConfigLoader parses an explicit dutyCycle for a synth instrument") {
     CompositionConfig config = ConfigLoader::LoadFromString(json);
     REQUIRE(config.instruments.size() == 1);
     CHECK(config.instruments[0].dutyCycle == doctest::Approx(0.25));
+}
+
+TEST_CASE("ConfigLoader parses an explicit arpeggio section for a synth instrument") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "key": { "root": "C", "scale": "major" },
+      "startPattern": "p1",
+      "instruments": [
+        { "id": "arp_pad", "type": "synth", "waveform": "square",
+          "arpeggio": { "semitones": [0, 4, 7], "rateHz": 16 },
+          "envelope": { "attack": 0.01, "decay": 0.1, "sustain": 0.7, "release": 0.2 } }
+      ],
+      "patterns": [ { "id": "p1", "steps": [] } ]
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    REQUIRE(config.instruments.size() == 1);
+    const std::vector<int>& offsets = config.instruments[0].arpeggio.semitoneOffsets;
+    REQUIRE(offsets.size() == 3);
+    CHECK(offsets[0] == 0);
+    CHECK(offsets[1] == 4);
+    CHECK(offsets[2] == 7);
+    CHECK(config.instruments[0].arpeggio.rateHz == doctest::Approx(16.0f));
 }
 
 TEST_CASE("ConfigLoader parses an explicit loFi section") {

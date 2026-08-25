@@ -36,7 +36,8 @@ int Mixer::NoteOn(const InstrumentId& instrument, float frequencyHz, float veloc
 
     for (size_t i = 0; i < kMaxSynthVoices; ++i) {
         if (!m_voices[i].IsActive()) {
-            m_voices[i].Configure(m_sampleRate, defIt->second.waveform, defIt->second.dutyCycle, defIt->second.envelope);
+            m_voices[i].Configure(m_sampleRate, defIt->second.waveform, defIt->second.dutyCycle,
+                                   defIt->second.arpeggio, defIt->second.envelope);
             m_voices[i].NoteOn(frequencyHz, velocity, gateDurationSamples);
             m_voiceInstrument[i] = instrument;
             return static_cast<int>(i);
