@@ -53,6 +53,19 @@ bool AudioEngine::Initialize(const AudioEngineConfig& config) {
     return true;
 }
 
+bool AudioEngine::InitializeOffline(const AudioEngineConfig& config) {
+    if (m_initialized) {
+        return true;
+    }
+
+    m_config = config;
+    m_mixer.Configure(m_config.sampleRate);
+    m_loFiProcessor.Configure(m_config.loFi);
+
+    m_initialized = true;
+    return true;
+}
+
 void AudioEngine::Start() {
     if (m_initialized && m_device) {
         ma_device_start(m_device.get());

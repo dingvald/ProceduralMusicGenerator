@@ -34,6 +34,15 @@ public:
     AudioEngine& operator=(const AudioEngine&) = delete;
 
     bool Initialize(const AudioEngineConfig& config);
+
+    // Configures the Mixer/LoFiProcessor exactly like Initialize(), but never
+    // touches ma_context/ma_device -- no audio hardware (real or null-backend)
+    // is opened. For driving RenderFrames() manually from an offline caller
+    // (e.g. a WAV-rendering tool) that supplies its own frame counting rather
+    // than a real-time device callback. Start()/Stop() are meaningless after
+    // this and are no-ops since m_device stays null.
+    bool InitializeOffline(const AudioEngineConfig& config);
+
     void Start();
     void Stop();
     void Shutdown();
@@ -44,9 +53,15 @@ public:
     uint32_t GetSampleRate() const { return m_config.sampleRate; }
     uint64_t GetFramesProcessed() const { return m_framesProcessed.load(std::memory_order_relaxed); }
 
+    // Drains ParameterBus and renders frameCount frames (interleaved,
+    // m_config.channels per frame) into output, advancing GetFramesProcessed()
+    // by frameCount. Normally invoked only via DataCallback from the
+    // real-time device thread; exposed publicly so an offline caller using
+    // InitializeOffline() can drive rendering directly from its own loop.
+    void RenderFrames(float* output, uint32_t frameCount);
+
 private:
     static void DataCallback(ma_device* device, void* output, const void* input, uint32_t frameCount);
-    void RenderFrames(float* output, uint32_t frameCount);
 
     AudioEngineConfig m_config;
     Mixer m_mixer;
