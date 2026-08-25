@@ -17,6 +17,7 @@ using InstrumentId = std::string;
 
 struct SynthInstrumentDef {
     Waveform waveform = Waveform::Sine;
+    float dutyCycle = 0.5f; // only meaningful for Waveform::Square
     ADSRParams envelope;
     float gain = 1.0f;
 };

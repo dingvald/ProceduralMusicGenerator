@@ -11,7 +11,7 @@ namespace pmg {
 // safe; Mixer owns a fixed pool of these and reuses inactive slots.
 class SynthVoice {
 public:
-    void Configure(uint32_t sampleRate, Waveform waveform, const ADSRParams& envelopeParams);
+    void Configure(uint32_t sampleRate, Waveform waveform, float dutyCycle, const ADSRParams& envelopeParams);
 
     void NoteOn(float frequencyHz, float velocity);
     void NoteOff();

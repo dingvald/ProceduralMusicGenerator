@@ -68,6 +68,7 @@ int main(int argc, char** argv) {
         if (instrument.type == InstrumentType::Synth) {
             SynthInstrumentDef def;
             def.waveform = instrument.waveform;
+            def.dutyCycle = instrument.dutyCycle;
             def.envelope = instrument.envelope;
             def.gain = instrument.gain;
             mixer.AddSynthInstrument(instrument.id, def);

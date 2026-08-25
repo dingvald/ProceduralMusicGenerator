@@ -51,6 +51,7 @@ InstrumentConfig ParseInstrument(const json& j) {
         inst.type = InstrumentType::Synth;
         inst.waveform = ParseWaveform(
             RequireField(j, "waveform", "synth instrument '" + inst.id + "'").get<std::string>());
+        inst.dutyCycle = j.value("dutyCycle", 0.5f);
         json env = RequireField(j, "envelope", "synth instrument '" + inst.id + "'");
         inst.envelope.attackSec = env.value("attack", 0.01f);
         inst.envelope.decaySec = env.value("decay", 0.1f);

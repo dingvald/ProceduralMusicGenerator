@@ -3,6 +3,9 @@
 A procedural/generative music engine written in modern C++. It supports:
 
 - **Procedural synth playback** — oscillator (sine/saw/square/triangle) + ADSR envelope voices.
+  Square supports a configurable **duty cycle** (e.g. 12.5/25/50/75%), like the pulse channels on
+  real chip sound hardware (NES, Game Boy) — a 50% square and a 25%-duty pulse are recognizably
+  different timbres even at the same pitch.
 - **Sample playback** — WAV samples decoded and triggered alongside synth voices.
 - **Real-time dynamic variation** — a pluggable `IVariationStrategy` behind `VariationEngine`
   decides pattern swaps and track mutes live. Two implementations ship: a rule-based,
@@ -122,11 +125,17 @@ directory containing `composition_demo.json`, since one test loads it indirectly
 
 ## Composition JSON
 
-See `assets/composition_demo.json` for a worked example: two one-bar patterns, a saw-wave synth
-lead instrument, a sample-based kick instrument, and two variation rules (a per-bar pattern swap
-and an occasional kick mute). Degree-based synth steps (`"degree"`) are resolved against the
+See `assets/composition_demo.json` for a worked example: two one-bar patterns, a 25%-duty pulse
+synth lead instrument, a sample-based kick instrument, and two variation rules (a per-bar pattern
+swap and an occasional kick mute). Degree-based synth steps (`"degree"`) are resolved against the
 composition's `key`/`scale` once at load time via `Theory::DegreeToFrequency`; steps without a
 `"degree"` field are treated as sample triggers.
+
+A synth instrument with `"waveform": "square"` accepts an optional `"dutyCycle"` field (0-1,
+default `0.5`), matching a chip pulse channel's duty setting — e.g. `0.125`, `0.25`, `0.5`, and
+`0.75` are the four duty cycles NES pulse channels support, each with a distinct timbre at the
+same pitch. It's ignored for other waveforms; `Waveform::Triangle` always integrates a fixed 50%
+pulse internally regardless of this field, since a chip's triangle channel has no duty control.
 
 An optional top-level `"variationStrategy"` field selects which `IVariationStrategy` `main.cpp`
 constructs: `"ruleBased"` (default — reads `"variationRules"`) or `"markovChain"` (reads

@@ -21,6 +21,10 @@ void Oscillator::SetWaveform(Waveform waveform) {
     m_waveform = waveform;
 }
 
+void Oscillator::SetDutyCycle(float duty) {
+    m_dutyCycle = std::max(0.01, std::min(0.99, static_cast<double>(duty)));
+}
+
 void Oscillator::Reset() {
     m_phase = 0.0;
     m_triangleIntegratorState = 0.0;
@@ -45,10 +49,15 @@ double Oscillator::PolyBlep(double t, double phaseIncrement) {
     return 0.0;
 }
 
-double Oscillator::BandlimitedSquare(double phaseIncrement) const {
-    double value = m_phase < 0.5 ? 1.0 : -1.0;
+double Oscillator::BandlimitedPulse(double phaseIncrement, double duty) const {
+    double value = m_phase < duty ? 1.0 : -1.0;
     value += PolyBlep(m_phase, phaseIncrement);
-    value -= PolyBlep(std::fmod(m_phase + 0.5, 1.0), phaseIncrement);
+
+    double tFalling = m_phase - duty;
+    if (tFalling < 0.0) {
+        tFalling += 1.0;
+    }
+    value -= PolyBlep(tFalling, phaseIncrement);
     return value;
 }
 
@@ -67,16 +76,18 @@ float Oscillator::NextSample() {
             break;
         }
         case Waveform::Square:
-            value = static_cast<float>(BandlimitedSquare(phaseIncrement));
+            value = static_cast<float>(BandlimitedPulse(phaseIncrement, m_dutyCycle));
             break;
         case Waveform::Triangle: {
-            // Leaky-integrate the band-limited square into a triangle, which
+            // Leaky-integrate a band-limited 50% pulse into a triangle, which
             // keeps the PolyBLEP correction and avoids DC drift; rescale back
             // to unit amplitude afterward. The *4 rescale assumes the filter
             // has settled into its periodic orbit; right after Reset() (or a
             // frequency jump) the integrator starts away from that orbit and
-            // can transiently overshoot before it settles, so clamp.
-            double square = BandlimitedSquare(phaseIncrement);
+            // can transiently overshoot before it settles, so clamp. Always
+            // 50% duty regardless of m_dutyCycle: a chip's triangle channel
+            // has no duty control, so this stays fixed.
+            double square = BandlimitedPulse(phaseIncrement, 0.5);
             m_triangleIntegratorState =
                 phaseIncrement * square + (1.0 - phaseIncrement) * m_triangleIntegratorState;
             double triangle = 4.0 * m_triangleIntegratorState;

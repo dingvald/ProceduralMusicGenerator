@@ -2,9 +2,10 @@
 
 namespace pmg {
 
-void SynthVoice::Configure(uint32_t sampleRate, Waveform waveform, const ADSRParams& envelopeParams) {
+void SynthVoice::Configure(uint32_t sampleRate, Waveform waveform, float dutyCycle, const ADSRParams& envelopeParams) {
     m_oscillator.SetSampleRate(sampleRate);
     m_oscillator.SetWaveform(waveform);
+    m_oscillator.SetDutyCycle(dutyCycle);
     m_envelope.Configure(envelopeParams, sampleRate);
 }
 

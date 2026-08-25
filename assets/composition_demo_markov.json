@@ -8,7 +8,8 @@
     {
       "id": "lead_synth",
       "type": "synth",
-      "waveform": "saw",
+      "waveform": "square",
+      "dutyCycle": 0.25,
       "gain": 0.35,
       "envelope": { "attack": 0.01, "decay": 0.12, "sustain": 0.6, "release": 0.25 }
     },

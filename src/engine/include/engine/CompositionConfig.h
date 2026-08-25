@@ -33,6 +33,7 @@ struct InstrumentConfig {
 
     // Synth fields (type == Synth)
     Waveform waveform = Waveform::Sine;
+    float dutyCycle = 0.5f; // only meaningful for waveform == Square
     ADSRParams envelope;
 
     // Sample fields (type == Sample)

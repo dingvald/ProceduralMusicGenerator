@@ -49,6 +49,7 @@ TEST_CASE("ConfigLoader parses a full valid composition") {
     CHECK(config.instruments[0].id == "syn");
     CHECK(config.instruments[0].type == InstrumentType::Synth);
     CHECK(config.instruments[0].waveform == Waveform::Square);
+    CHECK(config.instruments[0].dutyCycle == doctest::Approx(0.5)); // not set in kValidJson -> default
     CHECK(config.instruments[1].type == InstrumentType::Sample);
     CHECK(config.instruments[1].file == "samples/snare.wav");
 
@@ -112,6 +113,25 @@ TEST_CASE("ConfigLoader parses markovChain and variationStrategy") {
     CHECK(config.markovChain.at("a")[0].weight == doctest::Approx(0.3));
     CHECK(config.markovChain.at("a")[1].toPattern == "b");
     CHECK(config.markovChain.at("a")[1].weight == doctest::Approx(0.7));
+}
+
+TEST_CASE("ConfigLoader parses an explicit dutyCycle for a synth instrument") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "key": { "root": "C", "scale": "major" },
+      "startPattern": "p1",
+      "instruments": [
+        { "id": "pulse", "type": "synth", "waveform": "square", "dutyCycle": 0.25,
+          "envelope": { "attack": 0.01, "decay": 0.1, "sustain": 0.7, "release": 0.2 } }
+      ],
+      "patterns": [ { "id": "p1", "steps": [] } ]
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    REQUIRE(config.instruments.size() == 1);
+    CHECK(config.instruments[0].dutyCycle == doctest::Approx(0.25));
 }
 
 TEST_CASE("ConfigLoader throws when variationStrategy is markovChain but markovChain is missing") {
