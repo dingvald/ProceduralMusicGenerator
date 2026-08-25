@@ -256,6 +256,244 @@ compositions):
 Both fields are independent and can be used alone or together. Omitting `"loFi"` entirely leaves
 output unquantized, matching pre-`LoFiProcessor` behavior.
 
+### Full worked example: every feature in one composition
+
+The annotated listing below walks through a single composition that exercises every feature
+described above at once: all five waveforms (via 7 instruments — square lead, saw harmony,
+triangle bass, an arpeggiated square pad, a sample kick, and two differently-pitched noise
+instruments for snare/hi-hat), three patterns (a sparse `"intro"` built from manual `"steps"`
+only, plus a `"verse"` and `"chorus"` that each layer **three simultaneous `"melodies"` note-strings**
+— lead, harmony, bass — on top of manual percussion steps in the same pattern), rule-based
+variation (pattern swapping + two independent mute rules), a Markov transition table (present but
+inert here — see the note below), and a lo-fi output stage. It isn't meant to sound good, just to
+show the JSON shape for each feature side by side.
+
+JSON has no comment syntax, so this listing uses `//` purely for this explanation — it is **not**
+valid JSON as written. The exact same composition with the comments stripped is a real, loadable
+file at `assets/composition_demo_full.json` (verified against `ConfigLoader` and runnable via
+`DemoApp composition_demo_full.json --null-audio`); use that file, not this listing, if you want to
+copy-paste a starting point.
+
+```jsonc
+{
+  // Global playback settings: 100 BPM, 4 beats/bar, and which pattern plays first.
+  "sampleRate": 48000,
+  "tempo": { "bpm": 100, "beatsPerBar": 4 },
+  "startPattern": "intro",
+
+  // Which IVariationStrategy VariationEngine uses. "ruleBased" (shown here) reads
+  // "variationRules" below; "markovChain" would instead read "markovChain" below. Both blocks
+  // are present in this file for illustration, but only the one matching this field actually
+  // drives playback — the other is parsed and otherwise ignored.
+  "variationStrategy": "ruleBased",
+
+  // Post-mix bit-crush + sample-and-hold, applied once to the final mixed signal.
+  "loFi": { "bitDepth": 4, "holdFactor": 3 },
+
+  "instruments": [
+    {
+      // A 25%-duty pulse wave lead — the "melodies" block below drives this one.
+      "id": "lead_synth",
+      "type": "synth",
+      "waveform": "square",
+      "dutyCycle": 0.25,
+      "gain": 0.32,
+      "envelope": { "attack": 0.01, "decay": 0.12, "sustain": 0.55, "release": 0.2 }
+    },
+    {
+      // Sawtooth (unused by the other demo files) as a second, harmony-line voice.
+      "id": "harmony_synth",
+      "type": "synth",
+      "waveform": "saw",
+      "gain": 0.22,
+      "envelope": { "attack": 0.02, "decay": 0.15, "sustain": 0.4, "release": 0.25 }
+    },
+    {
+      // Triangle wave (also unused elsewhere) as a punchy, short-sustain bass voice.
+      "id": "bass_synth",
+      "type": "synth",
+      "waveform": "triangle",
+      "gain": 0.4,
+      "envelope": { "attack": 0.005, "decay": 0.08, "sustain": 0.8, "release": 0.05 }
+    },
+    {
+      // Held notes cycle through a major triad + octave at 12 steps/sec, faking a chord
+      // on one channel. "arpeggio" is what makes this differ from a plain square instrument.
+      "id": "arp_pad",
+      "type": "synth",
+      "waveform": "square",
+      "dutyCycle": 0.5,
+      "arpeggio": { "semitones": [0, 4, 7, 12], "rateHz": 12 },
+      "gain": 0.15,
+      "envelope": { "attack": 0.03, "decay": 0.2, "sustain": 0.6, "release": 0.4 }
+    },
+    {
+      // A "sample" instrument instead of "synth" — plays a decoded WAV, no waveform/envelope.
+      "id": "kick",
+      "type": "sample",
+      "file": "samples/kick.wav",
+      "gain": 0.95
+    },
+    {
+      // Noise-channel snare. Its "note"/"octave" (below, in the steps) select an LFSR clock
+      // rate rather than a pitch — a lower octave than the hi-hat gives a duller rattle.
+      "id": "snare",
+      "type": "synth",
+      "waveform": "noise",
+      "gain": 0.28,
+      "envelope": { "attack": 0.001, "decay": 0.09, "sustain": 0.0, "release": 0.02 }
+    },
+    {
+      // Same noise channel, driven at a much higher octave for a bright, hissy hi-hat.
+      "id": "hihat",
+      "type": "synth",
+      "waveform": "noise",
+      "gain": 0.22,
+      "envelope": { "attack": 0.001, "decay": 0.035, "sustain": 0.0, "release": 0.01 }
+    }
+  ],
+
+  "patterns": [
+    {
+      // A 1-bar intro with no melodies at all — just a held arp chord and steady hi-hats,
+      // to show a pattern can be built from "steps" alone.
+      "id": "intro",
+      "lengthBars": 1,
+      "steps": [
+        { "beat": 0.0, "instrument": "arp_pad", "note": "C", "octave": 3, "velocity": 0.5, "gate": 3.8 },
+        { "beat": 0.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.4 }
+        // ... hi-hat continues on every off-beat through beat 3.5; see the real file.
+      ]
+    },
+    {
+      // 2 bars (8 beats) — long enough for the melodies below, which each total 8 beats
+      // themselves (see "Set lengthBars to actually cover your melody" earlier in this doc).
+      "id": "verse",
+      "lengthBars": 2,
+      "melodies": [
+        {
+          // Lead line: default octave 4, mixes bare note letters ("E" -> E4), a duration
+          // override ("B:0.5"), a rest with its own override ("R:0.5"), an accidental
+          // ("F#"), and a stretched final note ("F#:2"). Beats: 1+1+1+.5+.5+1+1+2 = 8.
+          "instrument": "lead_synth",
+          "notes": "E G A B:0.5 R:0.5 A G F#:2",
+          "defaultOctave": 4,
+          "noteLengthBeats": 1.0,
+          "gateFraction": 0.75,
+          "velocity": 0.8
+        },
+        {
+          // Second, simultaneous melody line on a different instrument — this is what
+          // "multiple melodies in one pattern" means: both blocks share the same beat clock.
+          // "noteLengthBeats": 2.0 makes every un-overridden token 2 beats (C,R,E = 6 beats),
+          // then "D:1" and a trailing "R:1" bring the total to 8.
+          "instrument": "harmony_synth",
+          "notes": "C R E D:1 R:1",
+          "defaultOctave": 3,
+          "noteLengthBeats": 2.0,
+          "gateFraction": 0.6,
+          "velocity": 0.55
+        },
+        {
+          // A third, simultaneous melody — a root-note bass line under the lead/harmony,
+          // using explicit octaves ("E2") instead of relying on "defaultOctave".
+          "instrument": "bass_synth",
+          "notes": "E2 E2 G2 G2 A2 A2 G2 R",
+          "defaultOctave": 2,
+          "noteLengthBeats": 1.0,
+          "gateFraction": 0.9,
+          "velocity": 0.75
+        }
+      ],
+      "steps": [
+        // Manual "steps" mixed into the same pattern as the "melodies" above: a long-held
+        // arp chord, and a kick/snare/hi-hat percussion grid across all 8 beats.
+        { "beat": 0.0, "instrument": "arp_pad", "note": "C", "octave": 3, "velocity": 0.5, "gate": 7.8 },
+        { "beat": 0.0, "instrument": "kick", "velocity": 1.0 },
+        { "beat": 1.0, "instrument": "snare", "note": "C", "octave": 5, "velocity": 0.6 }
+        // ... full kick/snare/hi-hat grid continues through beat 7.5; see the real file.
+      ]
+    },
+    {
+      // A second full section, same shape as "verse" (three simultaneous melodies + manual
+      // percussion) but different notes/chord ("F" instead of "C") and a busier kick pattern,
+      // so the variation rules below have two contrasting sections to swap between.
+      "id": "chorus",
+      "lengthBars": 2,
+      "melodies": [
+        { "instrument": "lead_synth", "notes": "A B C5 D5 C5 B A:2", "defaultOctave": 4,
+          "noteLengthBeats": 1.0, "gateFraction": 0.7, "velocity": 0.9 },
+        { "instrument": "harmony_synth", "notes": "F R G R", "defaultOctave": 3,
+          "noteLengthBeats": 2.0, "gateFraction": 0.6, "velocity": 0.55 },
+        { "instrument": "bass_synth", "notes": "F2 F2 G2 G2 A2 A2 G2 R", "defaultOctave": 2,
+          "noteLengthBeats": 1.0, "gateFraction": 0.9, "velocity": 0.8 }
+      ],
+      "steps": [
+        { "beat": 0.0, "instrument": "arp_pad", "note": "F", "octave": 3, "velocity": 0.55, "gate": 7.8 },
+        { "beat": 0.0, "instrument": "kick", "velocity": 1.0 },
+        { "beat": 1.5, "instrument": "kick", "velocity": 0.8 }
+        // ... full grid continues; see the real file.
+      ]
+    }
+  ],
+
+  // Read by RuleBasedVariationStrategy since "variationStrategy" above is "ruleBased".
+  // Each rule fires once per its "scope" and samples one weighted option.
+  "variationRules": [
+    {
+      // Swaps which of the 3 patterns is active, weighted toward "verse".
+      "id": "swap_section",
+      "scope": "perBar",
+      "options": [
+        { "type": "swapPattern", "pattern": "intro", "weight": 0.05 },
+        { "type": "swapPattern", "pattern": "verse", "weight": 0.55 },
+        { "type": "swapPattern", "pattern": "chorus", "weight": 0.3 },
+        { "type": "noOp", "weight": 0.1 }
+      ]
+    },
+    {
+      // A second, independent rule — occasionally drops the bass out for a bar.
+      "id": "mute_bass_occasionally",
+      "scope": "perBar",
+      "options": [
+        { "type": "setTrackMuted", "track": "bass_synth", "muted": true, "weight": 0.2 },
+        { "type": "setTrackMuted", "track": "bass_synth", "muted": false, "weight": 0.8 }
+      ]
+    },
+    {
+      // A third, independent rule — occasionally drops the snare too.
+      "id": "mute_snare_occasionally",
+      "scope": "perBar",
+      "options": [
+        { "type": "setTrackMuted", "track": "snare", "muted": true, "weight": 0.15 },
+        { "type": "setTrackMuted", "track": "snare", "muted": false, "weight": 0.85 }
+      ]
+    }
+  ],
+
+  // Shown for reference only in this file: with "variationStrategy": "ruleBased" above,
+  // MarkovChainVariationStrategy never runs, so this table is parsed but has no effect on
+  // playback. Flip "variationStrategy" to "markovChain" to make this the active strategy
+  // instead (and the "variationRules" above would then become the inert one).
+  "markovChain": {
+    "patternTransitions": {
+      "intro": [
+        { "pattern": "verse", "weight": 1.0 }
+      ],
+      "verse": [
+        { "pattern": "verse", "weight": 0.4 },
+        { "pattern": "chorus", "weight": 0.5 },
+        { "pattern": "intro", "weight": 0.1 }
+      ],
+      "chorus": [
+        { "pattern": "verse", "weight": 0.6 },
+        { "pattern": "chorus", "weight": 0.4 }
+      ]
+    }
+  }
+}
+```
+
 ## Architecture notes
 
 - **Threading**: the audio callback thread (real-time, miniaudio) and the control thread (`main`,
