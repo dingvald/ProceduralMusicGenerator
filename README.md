@@ -136,6 +136,22 @@ DemoApp composition_demo_full.json --null-audio
 DemoApp composition_demo_layers.json --null-audio
 ```
 
+### Rendering to a WAV file (no audio hardware required)
+
+`DemoApp` accepts `--render-wav <path>` (optionally with `--seconds <n>`, default `30`) to render
+a composition straight to a 16-bit PCM WAV file instead of opening a playback device at all —
+useful for actually hearing the engine's output in an environment with no sound card, or for
+capturing a specific run to share:
+
+```
+DemoApp composition_demo_full.json --render-wav out.wav --seconds 25
+```
+
+This drives the exact same `Sequencer`/`VariationEngine`/`Mixer`/`LoFiProcessor` pipeline as real
+playback (via `AudioEngine::InitializeOffline()` + the now-public `AudioEngine::RenderFrames()`),
+just as fast as the CPU can go rather than paced to a real-time device callback, and encodes the
+output with miniaudio's WAV encoder.
+
 ### Running the tests
 
 Build the `Tests` project and run the resulting executable from the `assets/` directory (or any
