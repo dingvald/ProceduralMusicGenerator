@@ -180,12 +180,54 @@
         { "beat": 15.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.35 },
         { "beat": 15.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.25 }
       ]
+    },
+    {
+      "id": "bridge",
+      "lengthBars": 2,
+      "melodies": [
+        {
+          "instrument": "lead_synth",
+          "notes": "D5 F5 Bb5 A5",
+          "defaultOctave": 5,
+          "noteLengthBeats": 2.0,
+          "gateFraction": 0.6,
+          "velocity": 0.75
+        },
+        {
+          "instrument": "bass_synth",
+          "notes": "D2 F2 Bb2 A2",
+          "defaultOctave": 2,
+          "noteLengthBeats": 2.0,
+          "gateFraction": 0.9,
+          "velocity": 0.7
+        }
+      ],
+      "steps": [
+        { "beat": 0.0, "instrument": "kick", "velocity": 0.6 },
+        { "beat": 4.0, "instrument": "kick", "velocity": 0.7 },
+        { "beat": 0.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.22 },
+        { "beat": 1.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.2 },
+        { "beat": 2.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.22 },
+        { "beat": 3.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.2 },
+        { "beat": 4.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.22 },
+        { "beat": 5.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.2 },
+        { "beat": 6.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.22 },
+        { "beat": 7.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.2 }
+      ]
     }
   ],
   "markovChain": {
     "patternTransitions": {
       "intro": [
         { "pattern": "main_riff", "weight": 1.0 }
+      ],
+      "main_riff": [
+        { "pattern": "main_riff", "weight": 0.85 },
+        { "pattern": "bridge", "weight": 0.15 }
+      ],
+      "bridge": [
+        { "pattern": "bridge", "weight": 0.7 },
+        { "pattern": "main_riff", "weight": 0.3 }
       ]
     }
   }

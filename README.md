@@ -134,6 +134,7 @@ DemoApp composition_demo_markov.json --null-audio
 DemoApp composition_demo_melody.json --null-audio
 DemoApp composition_demo_full.json --null-audio
 DemoApp composition_demo_layers.json --null-audio
+DemoApp composition_battle_theme.json --null-audio
 ```
 
 ### Rendering to a WAV file (no audio hardware required)
@@ -325,6 +326,15 @@ valid JSON as written. The exact same composition with the comments stripped is 
 file at `assets/composition_demo_full.json` (verified against `ConfigLoader` and runnable via
 `DemoApp composition_demo_full.json --null-audio`); use that file, not this listing, if you want to
 copy-paste a starting point.
+
+For a composition that *is* meant to sound good, see `assets/composition_battle_theme.json` — a
+176 BPM Pokemon-R/B-style battle theme (`intro` into a dense eighth-note-driven `main_riff`, with a
+sparser two-bar `bridge` moving from D minor to a Bb major color for contrast). Its Markov chain
+gives `main_riff` an 85% chance per bar to keep looping and a 15% chance to duck into `bridge`,
+and gives `bridge` a 70% chance per bar to keep playing (so it usually completes its own two-bar
+phrase, sometimes repeating it, before returning) against a 30% chance to head back to `main_riff`.
+Render it to a WAV to hear it: `DemoApp composition_battle_theme.json --render-wav battle.wav
+--seconds 40`.
 
 ```jsonc
 {
