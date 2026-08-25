@@ -35,6 +35,8 @@ VariationOptionType ParseVariationOptionType(const std::string& name) {
     if (name == "noOp") return VariationOptionType::NoOp;
     if (name == "swapPattern") return VariationOptionType::SwapPattern;
     if (name == "setTrackMuted") return VariationOptionType::SetTrackMuted;
+    if (name == "addLayer") return VariationOptionType::AddLayer;
+    if (name == "removeLayer") return VariationOptionType::RemoveLayer;
     throw std::runtime_error("ConfigLoader: unknown variation option type '" + name + "'");
 }
 
@@ -147,6 +149,10 @@ VariationOptionConfig ParseVariationOption(const json& j, const std::string& rul
     } else if (option.type == VariationOptionType::SetTrackMuted) {
         option.targetId = RequireField(j, "track", "setTrackMuted option in rule '" + ruleId + "'").get<std::string>();
         option.boolValue = j.value("muted", false);
+    } else if (option.type == VariationOptionType::AddLayer) {
+        option.targetId = RequireField(j, "pattern", "addLayer option in rule '" + ruleId + "'").get<std::string>();
+    } else if (option.type == VariationOptionType::RemoveLayer) {
+        option.targetId = RequireField(j, "pattern", "removeLayer option in rule '" + ruleId + "'").get<std::string>();
     }
 
     return option;

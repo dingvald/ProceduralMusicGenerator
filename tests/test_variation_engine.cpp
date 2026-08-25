@@ -1,5 +1,6 @@
 #include <map>
 #include <string>
+#include <vector>
 
 #include "doctest/doctest.h"
 #include "engine/RuleBasedVariationStrategy.h"
@@ -71,4 +72,62 @@ TEST_CASE("RuleBasedVariationStrategy selection frequency tracks configured weig
 
     CHECK(freqB == doctest::Approx(0.3).epsilon(0.05));
     CHECK(freqA == doctest::Approx(0.7).epsilon(0.05));
+}
+
+TEST_CASE("RuleBasedVariationStrategy maps each option type to its own distinct decision type") {
+    // Regression test: the type mapping used to be a two-way ternary
+    // (SwapPattern vs. everything else treated as SetTrackMuted), which
+    // would have silently misclassified AddLayer/RemoveLayer options.
+    VariationRuleConfig swapRule;
+    swapRule.id = "swap";
+    VariationOptionConfig swapOption;
+    swapOption.type = VariationOptionType::SwapPattern;
+    swapOption.targetId = "pattern_b";
+    swapOption.weight = 1.0f;
+    swapRule.options = {swapOption};
+
+    VariationRuleConfig muteRule;
+    muteRule.id = "mute";
+    VariationOptionConfig muteOption;
+    muteOption.type = VariationOptionType::SetTrackMuted;
+    muteOption.targetId = "kick";
+    muteOption.boolValue = true;
+    muteOption.weight = 1.0f;
+    muteRule.options = {muteOption};
+
+    VariationRuleConfig addRule;
+    addRule.id = "add";
+    VariationOptionConfig addOption;
+    addOption.type = VariationOptionType::AddLayer;
+    addOption.targetId = "harmony_layer";
+    addOption.weight = 1.0f;
+    addRule.options = {addOption};
+
+    VariationRuleConfig removeRule;
+    removeRule.id = "remove";
+    VariationOptionConfig removeOption;
+    removeOption.type = VariationOptionType::RemoveLayer;
+    removeOption.targetId = "harmony_layer";
+    removeOption.weight = 1.0f;
+    removeRule.options = {removeOption};
+
+    VariationContext context;
+    context.barIndex = 0;
+    context.currentPatternId = "pattern_a";
+    context.rulesInScope = {swapRule, muteRule, addRule, removeRule};
+
+    RuleBasedVariationStrategy strategy;
+    RandomSource rng(1);
+    std::vector<VariationDecision> decisions = strategy.Decide(context, rng);
+
+    REQUIRE(decisions.size() == 4);
+    CHECK(decisions[0].type == VariationDecision::Type::SwapPattern);
+    CHECK(decisions[0].targetId == "pattern_b");
+    CHECK(decisions[1].type == VariationDecision::Type::SetTrackMuted);
+    CHECK(decisions[1].targetId == "kick");
+    CHECK(decisions[1].boolValue == true);
+    CHECK(decisions[2].type == VariationDecision::Type::AddLayer);
+    CHECK(decisions[2].targetId == "harmony_layer");
+    CHECK(decisions[3].type == VariationDecision::Type::RemoveLayer);
+    CHECK(decisions[3].targetId == "harmony_layer");
 }

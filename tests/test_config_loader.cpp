@@ -326,3 +326,56 @@ TEST_CASE("ConfigLoader propagates a malformed note-string as a runtime_error na
     )JSON";
     CHECK_THROWS_AS(ConfigLoader::LoadFromString(json), std::runtime_error);
 }
+
+TEST_CASE("ConfigLoader parses addLayer and removeLayer variation options") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "steps": [] }, { "id": "p2", "steps": [] } ],
+      "variationRules": [
+        { "id": "layering", "scope": "perBar", "options": [
+          { "type": "addLayer", "pattern": "p2", "weight": 0.4 },
+          { "type": "removeLayer", "pattern": "p2", "weight": 0.6 }
+        ] }
+      ]
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    REQUIRE(config.variationRules.size() == 1);
+    REQUIRE(config.variationRules[0].options.size() == 2);
+    CHECK(config.variationRules[0].options[0].type == VariationOptionType::AddLayer);
+    CHECK(config.variationRules[0].options[0].targetId == "p2");
+    CHECK(config.variationRules[0].options[1].type == VariationOptionType::RemoveLayer);
+    CHECK(config.variationRules[0].options[1].targetId == "p2");
+}
+
+TEST_CASE("ConfigLoader throws when an addLayer/removeLayer option is missing 'pattern'") {
+    const char* missingPatternOnAdd = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "steps": [] } ],
+      "variationRules": [
+        { "id": "r", "scope": "perBar", "options": [ { "type": "addLayer", "weight": 1.0 } ] }
+      ]
+    }
+    )JSON";
+    CHECK_THROWS_AS(ConfigLoader::LoadFromString(missingPatternOnAdd), std::runtime_error);
+
+    const char* missingPatternOnRemove = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "steps": [] } ],
+      "variationRules": [
+        { "id": "r", "scope": "perBar", "options": [ { "type": "removeLayer", "weight": 1.0 } ] }
+      ]
+    }
+    )JSON";
+    CHECK_THROWS_AS(ConfigLoader::LoadFromString(missingPatternOnRemove), std::runtime_error);
+}

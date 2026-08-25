@@ -29,9 +29,22 @@ std::vector<VariationDecision> RuleBasedVariationStrategy::Decide(const Variatio
         VariationDecision decision;
         decision.targetId = chosen.targetId;
         decision.boolValue = chosen.boolValue;
-        decision.type = chosen.type == VariationOptionType::SwapPattern
-            ? VariationDecision::Type::SwapPattern
-            : VariationDecision::Type::SetTrackMuted;
+        switch (chosen.type) {
+            case VariationOptionType::SwapPattern:
+                decision.type = VariationDecision::Type::SwapPattern;
+                break;
+            case VariationOptionType::SetTrackMuted:
+                decision.type = VariationDecision::Type::SetTrackMuted;
+                break;
+            case VariationOptionType::AddLayer:
+                decision.type = VariationDecision::Type::AddLayer;
+                break;
+            case VariationOptionType::RemoveLayer:
+                decision.type = VariationDecision::Type::RemoveLayer;
+                break;
+            case VariationOptionType::NoOp:
+                break; // already filtered out above; kept for switch completeness
+        }
         decisions.push_back(decision);
     }
 

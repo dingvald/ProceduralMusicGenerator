@@ -20,7 +20,7 @@ Sequencer::Sequencer(AudioEngine& audioEngine,
       m_randomSource(randomSource),
       m_config(std::move(config)),
       m_patterns(std::move(patterns)),
-      m_currentPatternId(m_config.startPattern) {}
+      m_activeLayers{PatternLayer{m_config.startPattern, 0, 0.0}} {}
 
 void Sequencer::SetVariationLogCallback(VariationLogCallback callback) {
     m_logCallback = std::move(callback);
@@ -64,8 +64,13 @@ void Sequencer::FireStep(const ResolvedStep& step) {
     m_audioEngine.GetParameterBus().Push(command);
 }
 
-void Sequencer::EvaluateVariationForBar(int barIndex) {
-    std::vector<VariationDecision> decisions = m_variationEngine.Evaluate(barIndex, m_currentPatternId, m_randomSource);
+void Sequencer::EvaluateVariationForBar(int barIndex, double currentGlobalBeat) {
+    // The base layer (index 0) is what VariationEngine reasons about as
+    // "the current pattern" -- Markov-chain transitions and swapPattern
+    // rules are only ever defined relative to it; extra layers are purely
+    // additive on top.
+    const std::string& basePatternId = m_activeLayers[0].patternId;
+    std::vector<VariationDecision> decisions = m_variationEngine.Evaluate(barIndex, basePatternId, m_randomSource);
 
     for (const VariationDecision& decision : decisions) {
         switch (decision.type) {
@@ -73,12 +78,14 @@ void Sequencer::EvaluateVariationForBar(int barIndex) {
                 break;
 
             case VariationDecision::Type::SwapPattern:
-                if (decision.targetId != m_currentPatternId && FindPattern(decision.targetId) != nullptr) {
+                if (decision.targetId != m_activeLayers[0].patternId && FindPattern(decision.targetId) != nullptr) {
                     if (m_logCallback) {
                         m_logCallback("[variation] bar " + std::to_string(barIndex) + ": swapping pattern '" +
-                                      m_currentPatternId + "' -> '" + decision.targetId + "'");
+                                      m_activeLayers[0].patternId + "' -> '" + decision.targetId + "'");
                     }
-                    m_currentPatternId = decision.targetId;
+                    m_activeLayers[0].patternId = decision.targetId;
+                    m_activeLayers[0].patternStartBeat = currentGlobalBeat;
+                    m_activeLayers[0].nextStepIndex = 0;
                 }
                 break;
 
@@ -94,7 +101,68 @@ void Sequencer::EvaluateVariationForBar(int barIndex) {
                 }
                 break;
             }
+
+            case VariationDecision::Type::AddLayer: {
+                bool alreadyActive = false;
+                for (const PatternLayer& layer : m_activeLayers) {
+                    if (layer.patternId == decision.targetId) {
+                        alreadyActive = true;
+                        break;
+                    }
+                }
+                if (!alreadyActive && FindPattern(decision.targetId) != nullptr) {
+                    // Starts fresh from the new pattern's own beat 0, right
+                    // now, independent of every other active layer's phase.
+                    m_activeLayers.push_back(PatternLayer{decision.targetId, 0, currentGlobalBeat});
+                    if (m_logCallback) {
+                        m_logCallback("[variation] bar " + std::to_string(barIndex) + ": adding layer '" +
+                                      decision.targetId + "'");
+                    }
+                }
+                break;
+            }
+
+            case VariationDecision::Type::RemoveLayer: {
+                // Layer 0 (the base) is never removable this way -- only
+                // layers added via AddLayer, so a composition can never end
+                // up with zero active layers (permanent silence).
+                for (size_t i = 1; i < m_activeLayers.size(); ++i) {
+                    if (m_activeLayers[i].patternId == decision.targetId) {
+                        m_activeLayers.erase(m_activeLayers.begin() + static_cast<std::ptrdiff_t>(i));
+                        if (m_logCallback) {
+                            m_logCallback("[variation] bar " + std::to_string(barIndex) + ": removing layer '" +
+                                          decision.targetId + "'");
+                        }
+                        break;
+                    }
+                }
+                break;
+            }
         }
+    }
+}
+
+void Sequencer::UpdateLayer(PatternLayer& layer, double currentGlobalBeat, int beatsPerBar) {
+    const Pattern* pattern = FindPattern(layer.patternId);
+    if (!pattern) {
+        return;
+    }
+
+    double patternLengthBeats = (pattern->lengthBars > 0 ? pattern->lengthBars : 1) * static_cast<double>(beatsPerBar);
+    double patternBeat = currentGlobalBeat - layer.patternStartBeat;
+    if (patternBeat >= patternLengthBeats) {
+        // Completed one or more full cycles of this layer's pattern length;
+        // advance the anchor by whole cycles (not to "now") so playback
+        // stays phase-locked to the beat grid instead of drifting.
+        double cyclesElapsed = std::floor(patternBeat / patternLengthBeats);
+        layer.patternStartBeat += cyclesElapsed * patternLengthBeats;
+        patternBeat = currentGlobalBeat - layer.patternStartBeat;
+        layer.nextStepIndex = 0;
+    }
+
+    while (layer.nextStepIndex < pattern->steps.size() && pattern->steps[layer.nextStepIndex].beatOffset <= patternBeat) {
+        FireStep(pattern->steps[layer.nextStepIndex]);
+        ++layer.nextStepIndex;
     }
 }
 
@@ -105,41 +173,17 @@ void Sequencer::Update() {
     int beatsPerBar = m_config.tempo.beatsPerBar > 0 ? m_config.tempo.beatsPerBar : 4;
     int targetBar = static_cast<int>(currentGlobalBeat / beatsPerBar);
 
-    std::string patternBeforeVariation = m_currentPatternId;
     while (m_currentBar < targetBar) {
         int nextBar = m_currentBar + 1;
-        EvaluateVariationForBar(nextBar);
+        EvaluateVariationForBar(nextBar, currentGlobalBeat);
         m_currentBar = nextBar;
     }
 
-    const Pattern* pattern = FindPattern(m_currentPatternId);
-    if (!pattern) {
-        return;
-    }
-
-    if (m_currentPatternId != patternBeforeVariation) {
-        // Swapped mid-update: restart the newly active pattern cleanly from
-        // its own beat 0, rather than wherever it would land if its cycle
-        // were phase-locked to the old pattern's.
-        m_patternStartBeat = currentGlobalBeat;
-        m_nextStepIndex = 0;
-    }
-
-    double patternLengthBeats = (pattern->lengthBars > 0 ? pattern->lengthBars : 1) * static_cast<double>(beatsPerBar);
-    double patternBeat = currentGlobalBeat - m_patternStartBeat;
-    if (patternBeat >= patternLengthBeats) {
-        // Completed one or more full cycles of the pattern's own length;
-        // advance the anchor by whole cycles (not to "now") so the pattern
-        // stays phase-locked to the beat grid instead of drifting.
-        double cyclesElapsed = std::floor(patternBeat / patternLengthBeats);
-        m_patternStartBeat += cyclesElapsed * patternLengthBeats;
-        patternBeat = currentGlobalBeat - m_patternStartBeat;
-        m_nextStepIndex = 0;
-    }
-
-    while (m_nextStepIndex < pattern->steps.size() && pattern->steps[m_nextStepIndex].beatOffset <= patternBeat) {
-        FireStep(pattern->steps[m_nextStepIndex]);
-        ++m_nextStepIndex;
+    // Each active layer scans its own pattern independently -- a fresh
+    // layer added moments ago and the long-running base layer can be at
+    // completely different points in completely different cycle lengths.
+    for (PatternLayer& layer : m_activeLayers) {
+        UpdateLayer(layer, currentGlobalBeat, beatsPerBar);
     }
 }
 

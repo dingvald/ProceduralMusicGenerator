@@ -1,0 +1,81 @@
+{
+  "sampleRate": 48000,
+  "tempo": { "bpm": 110, "beatsPerBar": 4 },
+  "startPattern": "groove",
+  "loFi": { "bitDepth": 4, "holdFactor": 3 },
+  "instruments": [
+    {
+      "id": "kick",
+      "type": "sample",
+      "file": "samples/kick.wav",
+      "gain": 0.9
+    },
+    {
+      "id": "hihat",
+      "type": "synth",
+      "waveform": "noise",
+      "gain": 0.22,
+      "envelope": { "attack": 0.001, "decay": 0.035, "sustain": 0.0, "release": 0.01 }
+    },
+    {
+      "id": "bass_synth",
+      "type": "synth",
+      "waveform": "triangle",
+      "gain": 0.4,
+      "envelope": { "attack": 0.005, "decay": 0.08, "sustain": 0.7, "release": 0.05 }
+    },
+    {
+      "id": "harmony_synth",
+      "type": "synth",
+      "waveform": "square",
+      "dutyCycle": 0.5,
+      "gain": 0.28,
+      "envelope": { "attack": 0.02, "decay": 0.15, "sustain": 0.5, "release": 0.2 }
+    }
+  ],
+  "patterns": [
+    {
+      "id": "groove",
+      "lengthBars": 1,
+      "steps": [
+        { "beat": 0.0, "instrument": "kick", "velocity": 1.0 },
+        { "beat": 0.0, "instrument": "bass_synth", "note": "E", "octave": 2, "velocity": 0.8, "gate": 1.5 },
+        { "beat": 0.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.4 },
+        { "beat": 0.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.3 },
+        { "beat": 1.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.4 },
+        { "beat": 1.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.3 },
+        { "beat": 2.0, "instrument": "kick", "velocity": 1.0 },
+        { "beat": 2.0, "instrument": "bass_synth", "note": "G", "octave": 2, "velocity": 0.8, "gate": 1.5 },
+        { "beat": 2.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.4 },
+        { "beat": 2.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.3 },
+        { "beat": 3.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.4 },
+        { "beat": 3.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.3 }
+      ]
+    },
+    {
+      "id": "harmony_layer",
+      "lengthBars": 3,
+      "melodies": [
+        {
+          "instrument": "harmony_synth",
+          "notes": "C E G C5 B G E C D F A C5",
+          "defaultOctave": 4,
+          "noteLengthBeats": 1.0,
+          "gateFraction": 0.7,
+          "velocity": 0.6
+        }
+      ]
+    }
+  ],
+  "variationRules": [
+    {
+      "id": "toggle_harmony_layer",
+      "scope": "perBar",
+      "options": [
+        { "type": "addLayer", "pattern": "harmony_layer", "weight": 0.25 },
+        { "type": "removeLayer", "pattern": "harmony_layer", "weight": 0.15 },
+        { "type": "noOp", "weight": 0.6 }
+      ]
+    }
+  ]
+}

@@ -10,9 +10,13 @@ A procedural/generative music engine written in modern C++. It supports:
   WAV-sample drums.
 - **Sample playback** — WAV samples decoded and triggered alongside synth voices.
 - **Real-time dynamic variation** — a pluggable `IVariationStrategy` behind `VariationEngine`
-  decides pattern swaps and track mutes live. Two implementations ship: a rule-based,
+  decides pattern swaps, track mutes, and layering live. Two implementations ship: a rule-based,
   weighted-random strategy, and a **Markov-chain strategy** that samples the next pattern from a
   weighted transition table keyed by the pattern currently playing.
+- **Simultaneous pattern layering** — beyond the one always-playing base pattern, additional
+  patterns (with entirely independent lengths/timing) can be added on top and later removed while
+  the base keeps going uninterrupted — e.g. an occasional harmony line layered over a steady
+  drum/bass groove.
 - **JSON-driven composition** — tempo, instruments, patterns, and variation rules (or a Markov
   transition table) are all defined in a JSON file loaded at startup (see
   `assets/composition_demo.json` and `assets/composition_demo_markov.json`).
@@ -128,6 +132,8 @@ exercised without real audio hardware. It also accepts an optional composition J
 DemoApp --null-audio
 DemoApp composition_demo_markov.json --null-audio
 DemoApp composition_demo_melody.json --null-audio
+DemoApp composition_demo_full.json --null-audio
+DemoApp composition_demo_layers.json --null-audio
 ```
 
 ### Running the tests
@@ -212,6 +218,34 @@ base pitch, restarting from the first offset on every new note) at `"rateHz"` st
 `assets/composition_demo.json`'s `arp_pad` instrument uses this to imply a minor triad on a single
 channel. Omitting `"arpeggio"` (or an empty `"semitones"` list) disables it, leaving the voice at
 its plain triggered pitch.
+
+### Variation rule option types
+
+Each `"variationRules"` entry's `"options"` array is a weighted list; one option fires per rule
+per bar (see **Architecture notes** below for exactly when). `"type"` is one of:
+
+- `"swapPattern"` (+ `"pattern"`): replaces the one always-playing **base** pattern (see layering,
+  below) with a different one.
+- `"setTrackMuted"` (+ `"track"`, `"muted"`): mutes/unmutes an instrument.
+- `"addLayer"` / `"removeLayer"` (+ `"pattern"`): adds or removes an *additional*, independently-timed
+  pattern playing simultaneously alongside the base — see `assets/composition_demo_layers.json`,
+  where a 3-bar `harmony_layer` pattern is layered on and off over a steady 1-bar `groove` base:
+
+  ```json
+  { "type": "addLayer", "pattern": "harmony_layer", "weight": 0.25 },
+  { "type": "removeLayer", "pattern": "harmony_layer", "weight": 0.15 }
+  ```
+
+  `addLayer` for a pattern already active, or `removeLayer` for one that isn't, is a no-op —
+  rules don't need to track layer state themselves. `removeLayer` can never remove the base
+  pattern (only `swapPattern` replaces that), so a composition can't end up with zero patterns
+  playing. A removed layer's already-triggered notes ring out naturally through their own
+  envelope/gate rather than cutting off abruptly; only *new* notes from that layer stop.
+- `"noOp"`: does nothing — useful as a weighted "most of the time, don't change anything" option.
+
+`"addLayer"`/`"removeLayer"` are only available under `"variationStrategy": "ruleBased"` —
+`MarkovChainVariationStrategy` only ever produces `swapPattern` decisions (or none), since it
+models transitions between mutually-exclusive base-pattern states, not layering.
 
 An optional top-level `"variationStrategy"` field selects which `IVariationStrategy` `main.cpp`
 constructs: `"ruleBased"` (default — reads `"variationRules"`) or `"markovChain"` (reads
@@ -502,20 +536,29 @@ copy-paste a starting point.
 - **A pattern loops on its own length, not the global bar cadence**: `Sequencer::Update` tracks two
   independent things from the same elapsed-beat clock — how often to ask `VariationEngine` for a
   decision (every composition-wide `beatsPerBar`, e.g. `"scope": "perBar"` rules firing every 4
-  beats) and how often the *current pattern's* step-scan cursor wraps back to its own beat 0
-  (`pattern.lengthBars * beatsPerBar`, tracked via an anchor beat, `m_patternStartBeat`, that
-  advances by whole pattern-cycles rather than snapping to "now" so playback stays locked to the
-  beat grid instead of drifting). These used to be the same period (the step-scan reset lived
-  inside the bar-evaluation loop), which meant any pattern longer than one bar had its tail beyond
-  beat `beatsPerBar` permanently skipped every cycle — invisible until melody note-strings made
-  multi-bar patterns with real content past beat 4 common. A pattern swap (mid-`Update`, via a
-  variation decision) resets the anchor to the swap instant, so the newly active pattern always
-  starts from its own beat 0 rather than wherever it'd land phase-locked to the old pattern's
-  cycle. `Sequencer` has no direct unit tests (it needs a real `AudioEngine` for its elapsed-frame
-  clock, which doesn't fit this project's fast/deterministic doctest style) — this fix was
-  verified by temporarily logging every `lead_synth` trigger and confirming a 2-bar melody fires
-  all 8 notes in order and loops cleanly, then confirming the existing 1-bar demos are unaffected,
-  against both a reverted and a fixed build.
+  beats) and how often each *active layer's* step-scan cursor wraps back to its own pattern's beat
+  0 (`pattern.lengthBars * beatsPerBar`, tracked per layer via an anchor beat,
+  `PatternLayer::patternStartBeat`, that advances by whole pattern-cycles rather than snapping to
+  "now" so playback stays locked to the beat grid instead of drifting). These used to be the same
+  period (the step-scan reset lived inside the bar-evaluation loop), which meant any pattern
+  longer than one bar had its tail beyond beat `beatsPerBar` permanently skipped every cycle —
+  invisible until melody note-strings made multi-bar patterns with real content past beat 4
+  common. A pattern swap (mid-`Update`, via a variation decision) resets the anchor to the swap
+  instant, so the newly active pattern always starts from its own beat 0 rather than wherever it'd
+  land phase-locked to the old pattern's cycle. `Sequencer` has no direct unit tests (it needs a
+  real `AudioEngine` for its elapsed-frame clock, which doesn't fit this project's fast/
+  deterministic doctest style) — this fix, and the layering mechanism below, were both verified by
+  temporarily logging trigger events (a 2-bar melody firing all 8 notes in order and looping
+  cleanly; a layer's notes firing concurrently with the base once added, stopping cleanly once
+  removed, and restarting from its own beat 0 on re-add) against both a reverted and a fixed
+  build.
+- **Layering**: `Sequencer` owns a `std::vector<PatternLayer>` (see `Sequencer.h`) instead of a
+  single current-pattern id. Layer `[0]` is the base (seeded from `"startPattern"`; only
+  `swapPattern` decisions ever touch it); `addLayer`/`removeLayer` decisions push/erase layers at
+  index >= 1. Every active layer runs the same independent step-scan/cycle logic described above
+  (`Sequencer::UpdateLayer`), so a 12-beat layer and a 4-beat base genuinely play at once, each on
+  its own clock — this needed no changes anywhere below `Sequencer` (`Mixer` already handles
+  concurrent `NoteOn`s to the same instrument, one per available voice).
 - **Variation seam**: `IVariationStrategy` is the pluggable interface behind `VariationEngine`.
   Two implementations ship: `RuleBasedVariationStrategy` (weighted-random per rule; the default)
   and `MarkovChainVariationStrategy` (weighted transition table keyed by current pattern id).

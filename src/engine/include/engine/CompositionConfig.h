@@ -69,11 +69,11 @@ struct PatternConfig {
     std::vector<MelodyConfig> melodies;
 };
 
-enum class VariationOptionType { NoOp, SwapPattern, SetTrackMuted };
+enum class VariationOptionType { NoOp, SwapPattern, SetTrackMuted, AddLayer, RemoveLayer };
 
 struct VariationOptionConfig {
     VariationOptionType type = VariationOptionType::NoOp;
-    std::string targetId;   // pattern id (SwapPattern) or track id (SetTrackMuted)
+    std::string targetId;   // pattern id (SwapPattern/AddLayer/RemoveLayer) or track id (SetTrackMuted)
     bool boolValue = false; // muted state (SetTrackMuted)
     float weight = 1.0f;
 };

@@ -15,9 +15,9 @@ struct VariationContext {
 };
 
 struct VariationDecision {
-    enum class Type { NoOp, SwapPattern, SetTrackMuted };
+    enum class Type { NoOp, SwapPattern, SetTrackMuted, AddLayer, RemoveLayer };
     Type type = Type::NoOp;
-    std::string targetId;   // pattern id (SwapPattern) or track id (SetTrackMuted)
+    std::string targetId;   // pattern id (SwapPattern/AddLayer/RemoveLayer) or track id (SetTrackMuted)
     bool boolValue = false; // muted state (SetTrackMuted)
 };
 
