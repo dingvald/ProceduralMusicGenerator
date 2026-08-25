@@ -188,6 +188,20 @@
         { "beat": 7.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.45 },
         { "beat": 7.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.35 }
       ]
+    },
+    {
+      "id": "sparkle_layer",
+      "lengthBars": 3,
+      "melodies": [
+        {
+          "instrument": "harmony_synth",
+          "notes": "C B A G E C G E C D E G",
+          "defaultOctave": 5,
+          "noteLengthBeats": 1.0,
+          "gateFraction": 0.6,
+          "velocity": 0.5
+        }
+      ]
     }
   ],
   "variationRules": [
@@ -215,6 +229,15 @@
       "options": [
         { "type": "setTrackMuted", "track": "snare", "muted": true, "weight": 0.15 },
         { "type": "setTrackMuted", "track": "snare", "muted": false, "weight": 0.85 }
+      ]
+    },
+    {
+      "id": "toggle_sparkle_layer",
+      "scope": "perBar",
+      "options": [
+        { "type": "addLayer", "pattern": "sparkle_layer", "weight": 0.2 },
+        { "type": "removeLayer", "pattern": "sparkle_layer", "weight": 0.15 },
+        { "type": "noOp", "weight": 0.65 }
       ]
     }
   ],

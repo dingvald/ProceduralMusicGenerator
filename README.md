@@ -311,12 +311,14 @@ output unquantized, matching pre-`LoFiProcessor` behavior.
 The annotated listing below walks through a single composition that exercises every feature
 described above at once: all five waveforms (via 7 instruments — square lead, saw harmony,
 triangle bass, an arpeggiated square pad, a sample kick, and two differently-pitched noise
-instruments for snare/hi-hat), three patterns (a sparse `"intro"` built from manual `"steps"`
-only, plus a `"verse"` and `"chorus"` that each layer **three simultaneous `"melodies"` note-strings**
-— lead, harmony, bass — on top of manual percussion steps in the same pattern), rule-based
-variation (pattern swapping + two independent mute rules), a Markov transition table (present but
-inert here — see the note below), and a lo-fi output stage. It isn't meant to sound good, just to
-show the JSON shape for each feature side by side.
+instruments for snare/hi-hat), four patterns (a sparse `"intro"` built from manual `"steps"`
+only, a `"verse"` and `"chorus"` that each layer **three simultaneous `"melodies"` note-strings**
+— lead, harmony, bass — on top of manual percussion steps in the same pattern, and a 3-bar
+`"sparkle_layer"` that plays independently of the composition's bar cadence — see **Simultaneous
+pattern layering** above), rule-based variation (pattern swapping, two independent mute rules, and
+an `addLayer`/`removeLayer` rule toggling `"sparkle_layer"` on and off over the base), a Markov
+transition table (present but inert here — see the note below), and a lo-fi output stage. It isn't
+meant to sound good, just to show the JSON shape for each feature side by side.
 
 JSON has no comment syntax, so this listing uses `//` purely for this explanation — it is **not**
 valid JSON as written. The exact same composition with the comments stripped is a real, loadable
@@ -484,6 +486,26 @@ copy-paste a starting point.
         { "beat": 1.5, "instrument": "kick", "velocity": 0.8 }
         // ... full grid continues; see the real file.
       ]
+    },
+    {
+      // A 3-bar (12-beat) layer — never a "swapPattern" target, only ever added/removed on top
+      // of whichever base pattern ("intro"/"verse"/"chorus" above) is currently playing, by the
+      // "toggle_sparkle_layer" rule below. Its 12-beat melody runs on its own independent clock,
+      // unrelated to both the 4-beat "perBar" variation cadence and the base pattern's own
+      // length — see "A pattern loops on its own length, not the global bar cadence" under
+      // Architecture notes.
+      "id": "sparkle_layer",
+      "lengthBars": 3,
+      "melodies": [
+        {
+          "instrument": "harmony_synth",
+          "notes": "C B A G E C G E C D E G",
+          "defaultOctave": 5,
+          "noteLengthBeats": 1.0,
+          "gateFraction": 0.6,
+          "velocity": 0.5
+        }
+      ]
     }
   ],
 
@@ -491,7 +513,7 @@ copy-paste a starting point.
   // Each rule fires once per its "scope" and samples one weighted option.
   "variationRules": [
     {
-      // Swaps which of the 3 patterns is active, weighted toward "verse".
+      // Swaps which of the 3 base patterns is active, weighted toward "verse".
       "id": "swap_section",
       "scope": "perBar",
       "options": [
@@ -517,6 +539,19 @@ copy-paste a starting point.
       "options": [
         { "type": "setTrackMuted", "track": "snare", "muted": true, "weight": 0.15 },
         { "type": "setTrackMuted", "track": "snare", "muted": false, "weight": 0.85 }
+      ]
+    },
+    {
+      // A fourth, independent rule — this is the dynamic layering: adds/removes
+      // "sparkle_layer" on top of whichever base pattern is currently playing, rather than
+      // replacing it. Most bars do neither (the 0.65-weight "noOp"), so the layer only drifts
+      // in and out occasionally instead of toggling every bar.
+      "id": "toggle_sparkle_layer",
+      "scope": "perBar",
+      "options": [
+        { "type": "addLayer", "pattern": "sparkle_layer", "weight": 0.2 },
+        { "type": "removeLayer", "pattern": "sparkle_layer", "weight": 0.15 },
+        { "type": "noOp", "weight": 0.65 }
       ]
     }
   ],
