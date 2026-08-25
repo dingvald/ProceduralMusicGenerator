@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 
+#include "engine/LoFiProcessor.h"
 #include "engine/Mixer.h"
 #include "engine/ParameterBus.h"
 
@@ -18,6 +19,7 @@ struct AudioEngineConfig {
     uint32_t sampleRate = 48000;
     uint32_t channels = 2;       // device output channel count; the mono mixer sum is duplicated across channels
     bool useNullBackend = false; // headless smoke-test path (see README) - no real audio hardware required
+    LoFiConfig loFi;             // post-mix bit-depth/sample-hold quantization; defaults to a no-op
 };
 
 // The only class that touches raw miniaudio device APIs. Owns the Mixer and
@@ -48,6 +50,7 @@ private:
 
     AudioEngineConfig m_config;
     Mixer m_mixer;
+    LoFiProcessor m_loFiProcessor;
     ParameterBus m_parameterBus;
     std::atomic<uint64_t> m_framesProcessed{0};
     std::unique_ptr<ma_context> m_context;

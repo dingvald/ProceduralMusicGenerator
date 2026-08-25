@@ -63,6 +63,8 @@ TEST_CASE("ConfigLoader parses a full valid composition") {
     REQUIRE(config.variationRules[0].options.size() == 2);
     CHECK(config.variationStrategy == VariationStrategyKind::RuleBased);
     CHECK(config.markovChain.empty());
+    CHECK(config.loFi.bitDepth == 16); // not set in kValidJson -> default (no quantization)
+    CHECK(config.loFi.holdFactor == 1);
 }
 
 TEST_CASE("ConfigLoader throws on missing required field") {
@@ -132,6 +134,23 @@ TEST_CASE("ConfigLoader parses an explicit dutyCycle for a synth instrument") {
     CompositionConfig config = ConfigLoader::LoadFromString(json);
     REQUIRE(config.instruments.size() == 1);
     CHECK(config.instruments[0].dutyCycle == doctest::Approx(0.25));
+}
+
+TEST_CASE("ConfigLoader parses an explicit loFi section") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "key": { "root": "C", "scale": "major" },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "steps": [] } ],
+      "loFi": { "bitDepth": 4, "holdFactor": 4 }
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    CHECK(config.loFi.bitDepth == 4);
+    CHECK(config.loFi.holdFactor == 4);
 }
 
 TEST_CASE("ConfigLoader throws when variationStrategy is markovChain but markovChain is missing") {

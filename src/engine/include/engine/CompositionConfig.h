@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "engine/Envelope.h"
+#include "engine/LoFiProcessor.h"
 #include "engine/Oscillator.h"
 
 namespace pmg {
@@ -91,6 +92,7 @@ struct CompositionConfig {
     std::string startPattern;
     std::vector<InstrumentConfig> instruments;
     std::vector<PatternConfig> patterns;
+    LoFiConfig loFi; // post-mix bit-depth/sample-hold quantization; defaults to a no-op
     VariationStrategyKind variationStrategy = VariationStrategyKind::RuleBased;
     std::vector<VariationRuleConfig> variationRules; // used when variationStrategy == RuleBased
     MarkovChainConfig markovChain;                   // used when variationStrategy == MarkovChain

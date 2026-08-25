@@ -192,6 +192,12 @@ CompositionConfig ConfigLoader::LoadFromString(const std::string& jsonText) {
             "ConfigLoader: variationStrategy is 'markovChain' but no 'markovChain.patternTransitions' were provided");
     }
 
+    if (root.contains("loFi")) {
+        json loFi = root["loFi"];
+        config.loFi.bitDepth = loFi.value("bitDepth", 16);
+        config.loFi.holdFactor = loFi.value("holdFactor", 1);
+    }
+
     return config;
 }
 

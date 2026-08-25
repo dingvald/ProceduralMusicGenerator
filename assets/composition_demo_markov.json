@@ -4,6 +4,7 @@
   "key": { "root": "C", "scale": "minor_pentatonic" },
   "startPattern": "pattern_a",
   "variationStrategy": "markovChain",
+  "loFi": { "bitDepth": 4, "holdFactor": 4 },
   "instruments": [
     {
       "id": "lead_synth",

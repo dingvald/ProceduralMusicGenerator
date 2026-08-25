@@ -14,6 +14,9 @@ A procedural/generative music engine written in modern C++. It supports:
 - **JSON-driven composition** — tempo, key/scale, instruments, patterns, and variation rules (or a
   Markov transition table) are all defined in a JSON file loaded at startup (see
   `assets/composition_demo.json` and `assets/composition_demo_markov.json`).
+- **Lo-fi output stage** — an optional post-mix `LoFiProcessor` quantizes amplitude to a coarse
+  bit depth and/or holds samples across a configurable window (naive, unfiltered downsampling),
+  emulating a real chip's low-resolution DAC instead of a clean modern one.
 
 Built with [premake5](https://premake.github.io/); targets Windows via Visual Studio 2026 for
 this pass (see **Build** below for the current premake action caveat).
@@ -32,10 +35,11 @@ constrains which features earn a place here:
   (e.g. smooth continuous-parameter modulation, orchestral-style layering) are out of scope
   unless they're in service of an authentically chip-like effect.
 - Favor primitives real sound chips actually had: pulse waves with a **selectable duty cycle**
-  (not just a fixed 50% square), a **noise channel** (LFSR-style) for percussion instead of only
-  sample playback, low **polyphony per channel** (chip channels rarely stacked notes — arpeggios
-  faked chords by cycling one channel's pitch quickly), and coarse **bit-depth/sample-rate**
-  quantization on the output stage.
+  (shipped — `Oscillator::SetDutyCycle`), coarse **bit-depth/sample-hold quantization** on the
+  output stage (shipped — `LoFiProcessor`), a **noise channel** (LFSR-style) for percussion
+  instead of only sample playback (not yet built), and low **polyphony per channel** (chip
+  channels rarely stacked notes — arpeggios faked chords by cycling one channel's pitch quickly;
+  not yet built).
 - The variation system (rule-based / Markov-chain pattern swapping, track muting) is squarely in
   scope as-is — procedural arrangement variation is exactly how chiptune loops avoided feeling
   static despite tight hardware constraints.
@@ -163,6 +167,23 @@ possible next patterns (weights need not sum to 1). A pattern with no entry, or 
 next pattern equals the current one, simply keeps playing. `ConfigLoader` throws if
 `"variationStrategy"` is `"markovChain"` but no `"markovChain.patternTransitions"` is provided.
 
+An optional top-level `"loFi"` object configures the post-mix `LoFiProcessor` (see both demo
+compositions):
+
+```json
+"loFi": { "bitDepth": 4, "holdFactor": 4 }
+```
+
+- `"bitDepth"` (default `16`, clamped to `[1, 16]`): quantizes the final mixed sample to
+  `2^bitDepth` amplitude levels. `16` is a no-op; `4` (16 levels) gives a rough NES-DAC-like
+  graininess.
+- `"holdFactor"` (default `1`, clamped to `>= 1`): a naive, unfiltered sample-and-hold — the
+  output only updates once every N samples, aliasing on purpose rather than being cleanly
+  resampled. `1` is a no-op; `4` at a 48kHz device rate behaves like a ~12kHz update rate.
+
+Both fields are independent and can be used alone or together. Omitting `"loFi"` entirely leaves
+output unquantized, matching pre-`LoFiProcessor` behavior.
+
 ## Architecture notes
 
 - **Threading**: the audio callback thread (real-time, miniaudio) and the control thread (`main`,
@@ -178,3 +199,8 @@ next pattern equals the current one, simply keeps playing. `ConfigLoader` throws
   can be added the same way.
 - **Engine is a static lib**, not header-only, so `miniaudio.h`'s implementation
   (`MINIAUDIO_IMPLEMENTATION`) is compiled exactly once, in `src/engine/src/miniaudio_impl.cpp`.
+- **Output pipeline**: `AudioEngine::RenderFrames` calls `Mixer::RenderNextSample()` for the
+  mixed-down mono sample, then always runs it through `LoFiProcessor::Process` before writing to
+  the device buffer — the processor is a no-op when unconfigured, so this costs nothing when
+  `"loFi"` is absent from the composition. It's a single global stage (like a real chip's shared
+  DAC), not per-instrument.

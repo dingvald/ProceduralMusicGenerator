@@ -58,6 +58,7 @@ int main(int argc, char** argv) {
     audioConfig.sampleRate = config.sampleRate;
     audioConfig.channels = 2;
     audioConfig.useNullBackend = useNullBackend;
+    audioConfig.loFi = config.loFi;
     if (!audioEngine.Initialize(audioConfig)) {
         std::cerr << "Failed to initialize audio device.\n";
         return 1;
