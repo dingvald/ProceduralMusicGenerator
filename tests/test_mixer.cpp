@@ -1,4 +1,5 @@
 #include <cmath>
+#include <memory>
 
 #include "doctest/doctest.h"
 #include "engine/Mixer.h"
@@ -193,6 +194,67 @@ TEST_CASE("Mixer sums independently-panned instruments per channel") {
         }
     }
     CHECK(heardBoth);
+}
+
+TEST_CASE("Mixer clamps a synth instrument's pan beyond +1.0/-1.0 instead of inverting phase") {
+    Mixer mixer;
+    const uint32_t sampleRate = 1000;
+    mixer.Configure(sampleRate);
+
+    // A "pan": 11.0 typo (meant to be 1.0) must behave exactly like
+    // hard-right, not amplify/invert -- silent left channel, and the right
+    // channel's gain must be exactly 1.0 (not 1.0 - 11.0 = -10.0).
+    SynthInstrumentDef farRight;
+    farRight.waveform = Waveform::Sine;
+    farRight.envelope.attackSec = 0.0f;
+    farRight.envelope.decaySec = 0.0f;
+    farRight.envelope.sustainLevel = 1.0f;
+    farRight.envelope.releaseSec = 0.005f;
+    farRight.pan = 11.0f;
+    mixer.AddSynthInstrument("far_right", farRight);
+    mixer.NoteOn("far_right", 100.0f, 1.0f);
+
+    SynthInstrumentDef farLeft;
+    farLeft.waveform = Waveform::Sine;
+    farLeft.envelope.attackSec = 0.0f;
+    farLeft.envelope.decaySec = 0.0f;
+    farLeft.envelope.sustainLevel = 1.0f;
+    farLeft.envelope.releaseSec = 0.005f;
+    farLeft.pan = -11.0f;
+    mixer.AddSynthInstrument("far_left", farLeft);
+    mixer.NoteOn("far_left", 150.0f, 1.0f);
+
+    for (int i = 0; i < 20; ++i) {
+        float left, right;
+        mixer.RenderNextStereoSample(left, right);
+        // Bounded by 1.0 (sine amplitude) * 1.0 (velocity) * 1.0 (gain) *
+        // clamped pan gain of 1.0 -- an unclamped pan would let this exceed
+        // 1.0 (e.g. up to 10x for pan == 11.0's raw 1.0 - 11.0 == -10.0 gain).
+        CHECK(std::fabs(left) <= 1.0f + 1e-4f);
+        CHECK(std::fabs(right) <= 1.0f + 1e-4f);
+    }
+}
+
+TEST_CASE("Mixer clamps a sample instrument's pan the same way as a synth instrument's") {
+    Mixer mixer;
+    mixer.Configure(1000);
+
+    auto asset = std::make_shared<SampleAsset>();
+    asset->channels = 1;
+    asset->sampleRate = 1000;
+    asset->interleavedPCM.assign(20, 1.0f); // constant full-scale signal
+
+    SampleInstrumentDef def;
+    def.asset = asset;
+    def.gain = 1.0f;
+    def.pan = -11.0f; // typo'd hard-left
+    mixer.AddSampleInstrument("far_left_sample", def);
+    mixer.TriggerSample("far_left_sample");
+
+    float left, right;
+    mixer.RenderNextStereoSample(left, right);
+    CHECK(std::fabs(left) <= 1.0f + 1e-4f);
+    CHECK(std::fabs(right) < 1e-6f); // still fully silenced on the right, same as pan == -1.0
 }
 
 TEST_CASE("Mixer suppresses NoteOn on a muted track") {

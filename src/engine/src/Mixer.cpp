@@ -1,5 +1,7 @@
 #include "engine/Mixer.h"
 
+#include <algorithm>
+
 namespace pmg {
 
 namespace {
@@ -9,7 +11,12 @@ namespace {
 // never sets pan. Real chip hardware (Game Boy NR51 hard L/R/both routing,
 // SNES per-voice L/R volume registers) never did smooth psychoacoustic
 // panning either, so a plain linear law is the period-plausible choice.
+// pan is clamped to the documented [-1, 1] range first: outside it, either
+// gain formula goes negative (phase-inverted and amplified beyond what
+// "hard left/right" means), which a typo like "pan": 11 instead of 1.0
+// would trigger silently otherwise.
 void PanGains(float pan, float& leftGain, float& rightGain) {
+    pan = std::clamp(pan, -1.0f, 1.0f);
     leftGain = pan <= 0.0f ? 1.0f : 1.0f - pan;
     rightGain = pan >= 0.0f ? 1.0f : 1.0f + pan;
 }

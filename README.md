@@ -415,13 +415,14 @@ Every instrument (synth or sample) accepts an optional `"pan"` field:
 { "id": "pad", "type": "synth", "waveform": "square", "pan": -0.4, "...": "..." }
 ```
 
-`-1.0` is hard left, `+1.0` is hard right, and `0.0` (the default) is dead center. Panning uses a
-linear law — `leftGain = pan <= 0 ? 1 : 1 - pan`, `rightGain = pan >= 0 ? 1 : 1 + pan` — rather
-than an equal-power one, so `"pan": 0.0` reproduces the exact pre-panning mono-summed loudness
-(gain `1.0` on both channels) for any composition that never sets it. A smooth psychoacoustic pan
-curve would also be out of place here anyway: real chip hardware never had one either (the Game
-Boy hard-routes each channel to left, right, or both via its `NR51` register; the SNES S-DSP gives
-each voice independent, but not equal-power, L/R volume registers).
+`-1.0` is hard left, `+1.0` is hard right, and `0.0` (the default) is dead center — values outside
+`[-1.0, 1.0]` are clamped rather than accepted (see **Architecture notes**). Panning uses a linear
+law — `leftGain = pan <= 0 ? 1 : 1 - pan`, `rightGain = pan >= 0 ? 1 : 1 + pan` — rather than an
+equal-power one, so `"pan": 0.0` reproduces the exact pre-panning mono-summed loudness (gain `1.0`
+on both channels) for any composition that never sets it. A smooth psychoacoustic pan curve would
+also be out of place here anyway: real chip hardware never had one either (the Game Boy hard-routes
+each channel to left, right, or both via its `NR51` register; the SNES S-DSP gives each voice
+independent, but not equal-power, L/R volume registers).
 
 A synth instrument with `"waveform": "square"` accepts an optional `"dutyCycle"` field (0-1,
 default `0.5`), matching a chip pulse channel's duty setting — e.g. `0.125`, `0.25`, `0.5`, and
@@ -1142,6 +1143,14 @@ sibling (15%) or returning to either riff variant (15% each). Render it to a WAV
   no-shared-state `Process(float) -> float` processors, so running two of them is the whole change.
   `channels == 1` still downmixes `(left + right) * 0.5f` for a mono device; `channels > 2` (no
   demo asset exercises this) duplicates the right channel into every slot past index 1.
+- **`PanGains` clamps its input to `[-1, 1]`**: both gain formulas assume `pan` stays in that range
+  -- outside it, either one goes negative (e.g. `pan == 11.0` gives `leftGain = 1.0 - 11.0 == -10.0`),
+  which phase-inverts and amplifies rather than reproducing "hard left/right", so a `"pan": 11`
+  typo (meant to be `1.0`) would otherwise distort output well past clipping with no error anywhere.
+  Fixed at the one shared `PanGains` function both `SynthVoice` and `SamplePlayer` rendering already
+  funnel through in `Mixer::RenderNextStereoSample`, so both instrument types are covered by a
+  single change -- same "clamp at the lowest shared implementation" reasoning as `Envelope`'s
+  `sustainLevel` clamp above and `LoFiProcessor`'s `bitDepth`/`holdFactor`.
 - **Playlist streaming and hot reload swap tracks by briefly stopping the device, not by
   reopening it**: `DemoApp`'s `ActivateTrack` (in `main.cpp`, not the `Engine` lib — this is purely
   an application-layer concern) is the one place both playlist advance and hot reload go through.
