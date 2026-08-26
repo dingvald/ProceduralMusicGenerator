@@ -34,6 +34,15 @@ A procedural/generative music engine written in modern C++. It supports:
   (scale-constrained random-walk melodies, expanded at load time from a key/scale/RNG seed instead
   of hand-written notes) and `"generatedRhythms"` (Euclidean-rhythm percussion, via Bjorklund's
   algorithm). Optionally seeded for fully reproducible output.
+- **Vibrato** — an optional per-instrument sine-shaped pitch LFO, the same technique chip-tracker
+  auto-vibrato used to add wobble to a held note.
+- **FM synthesis** — an optional 2-operator phase-modulation layer (a sine modulator perturbing a
+  sine carrier's phase), modeled on how Yamaha OPN/OPL chips (e.g. the YM2612 in the Sega Genesis)
+  built FM voices — a genuinely period-plausible way to get bell/electric-piano-like textures the
+  other waveforms can't reach on their own.
+- **Echo / delay** — a second global post-mix stage, modeled on the SNES S-DSP's built-in digital
+  echo buffer, applied before the lo-fi stage so the echo tail gets the same bit-crush as the dry
+  signal.
 
 Built with [premake5](https://premake.github.io/); targets Windows via Visual Studio 2026 for
 this pass (see **Build** below for the current premake action caveat).
@@ -140,6 +149,7 @@ DemoApp composition_demo_full.json --null-audio
 DemoApp composition_demo_layers.json --null-audio
 DemoApp composition_battle_theme.json --null-audio
 DemoApp composition_demo_generated.json --null-audio
+DemoApp composition_demo_textures.json --null-audio
 ```
 
 ### Rendering to a WAV file (no audio hardware required)
@@ -293,6 +303,60 @@ base pitch, restarting from the first offset on every new note) at `"rateHz"` st
 `assets/composition_demo.json`'s `arp_pad` instrument uses this to imply a minor triad on a single
 channel. Omitting `"arpeggio"` (or an empty `"semitones"` list) disables it, leaving the voice at
 its plain triggered pitch.
+
+### Vibrato
+
+A synth instrument accepts an optional `"vibrato"` field:
+
+```json
+"vibrato": { "rateHz": 6.0, "depthCents": 25.0 }
+```
+
+While a note is held, the voice's pitch oscillates sinusoidally around its base frequency at
+`"rateHz"` cycles per second, peaking `"depthCents"` cents (hundredths of a semitone) sharp and
+flat — the same mechanism as chip-tracker/hardware auto-vibrato, restarting its cycle from center
+on every new note (like `"arpeggio"` does). Omitting `"vibrato"` (or `"depthCents": 0`) disables
+it. See `assets/composition_demo_textures.json`'s `vibrato_lead` instrument for an isolated,
+deliberately obvious example.
+
+### FM synthesis
+
+A synth instrument accepts an optional `"fm"` field:
+
+```json
+"fm": { "ratio": 3.5, "amount": 0.6 }
+```
+
+A second sine oscillator (the "modulator") phase-modulates the carrier oscillator each sample,
+modeled on how 2-operator FM chips (Yamaha OPN/OPL, e.g. the YM2612 in the Sega Genesis) generated
+voices — the technique that produced classic bell, electric-piano, and metallic textures the other
+waveforms here can't reach on their own. `"ratio"` sets the modulator's frequency as a multiple of
+the carrier's (so it tracks arpeggio/vibrato pitch changes correctly); `"amount"` is the peak phase
+deviation in cycles (turns), typically `0.0`-`2.0`. **Only audible when the instrument's
+`"waveform"` is `"sine"`** — FM perturbs the phase read for `Oscillator::NextSample`, and only the
+`Sine` case honors that; other waveforms silently ignore it rather than erroring, since perturbing
+their band-limited edge correction wouldn't correspond to any real FM chip behavior anyway.
+Omitting `"fm"` (or `"amount": 0`) disables it. See `assets/composition_demo_textures.json`'s
+`fm_bell` instrument for an isolated example.
+
+### Echo / delay
+
+An optional top-level `"delay"` field:
+
+```json
+"delay": { "delayTimeSeconds": 0.18, "feedback": 0.35, "mix": 0.25 }
+```
+
+A single global post-mix echo stage, modeled on the SNES S-DSP's built-in digital echo buffer
+rather than a generic modern reverb/delay plugin — like `"loFi"` (below), it's a shared stage
+downstream of the mix, not per-instrument. `"delayTimeSeconds"` sets the tap length (clamped to a
+2-second buffer); `"feedback"` (clamped below `1.0`, so the loop can never grow unbounded) controls
+how many times a repeat echoes before dying out; `"mix"` (`0` = dry only, `1` = wet only) sets the
+echo's presence, and is the field that actually disables it at `0` (the default). Applied *before*
+`"loFi"` in the output chain, so the echo tail gets the same bit-crush character as the dry signal
+rather than sounding cleaner than it. See `assets/composition_demo_textures.json` for an isolated,
+deliberately obvious example, or `assets/composition_battle_theme.json` for a subtle, always-on
+touch of atmosphere.
 
 ### Variation rule option types
 
@@ -765,3 +829,33 @@ sibling (15%) or returning to either riff variant (15% each). Render it to a WAV
   to `std::random_device` like the rest of the engine's otherwise-non-reproducible RNG usage) — so
   a fixed seed makes exactly one block's output reproducible without needing any shared RNG state
   threaded through `ConfigLoader`'s otherwise-stateless parsing.
+- **Vibrato and FM compose through the same per-sample seam as the arpeggiator**:
+  `SynthVoice::RenderSample` computes one `carrierFreq = baseFrequency *
+  Arpeggiator::NextMultiplier() * Vibrato::NextMultiplier()` each sample, so all three frequency
+  modulations stack correctly regardless of which are configured. FM is phase modulation, not true
+  frequency modulation: `Oscillator::NextSample` grew an optional `phaseModulation` parameter
+  (default `0.0`, so every pre-existing call site compiles unchanged) that only the `Sine` case
+  reads (`sin(2π(phase + phaseModulation))`); Saw/Square/Triangle ignore it outright, since
+  perturbing their PolyBLEP-corrected phase math would break the band-limiting correction and
+  doesn't correspond to anything a real FM chip did. `SynthVoice` owns a second `Oscillator` as the
+  FM modulator, its frequency recomputed every sample as `carrierFreq * FmConfig::ratio` — tracking
+  the *same* per-sample carrier frequency (arpeggio/vibrato included) rather than a fixed root, so
+  an FM voice stays in tune with itself even while arpeggiating or vibrating. `Vibrato::NoteOn()`
+  and the FM modulator's `Reset()` both fire on every `NoteOn`, matching `Arpeggiator::NoteOn()`'s
+  precedent (a new note starts every modulation cycle cleanly rather than continuing a previous
+  note's phase).
+- **Echo/delay is a second global post-mix stage, chained before lo-fi**: `DelayProcessor` follows
+  `LoFiProcessor`'s exact `Configure`/`Process`-one-sample-at-a-time shape and the same
+  no-allocation-after-`Configure` guarantee — its circular buffer is a fixed
+  `std::array<float, 96000>` (2 seconds at 48kHz) sized for the longest delay it supports, not a
+  `std::vector` sized to the requested delay, so `Process` never allocates regardless of what a
+  composition asks for; a request beyond that length is silently clamped rather than growing the
+  buffer. `AudioEngine::RenderFrames` chains `m_loFiProcessor.Process(m_delayProcessor.Process(...))`
+  — delay runs first so its echo tail passes through the same bit-crush as the dry signal in the
+  final output, rather than sounding cleaner than everything else. The feedback loop itself is
+  *not* re-quantized on each repeat (feedback accumulates at full float precision inside
+  `DelayProcessor`, only getting bit-crushed once, at the very end): quantizing every round trip
+  was considered and rejected, since it would compound quantization noise each repeat, making a
+  decaying echo sound *crunchier* over time instead of cleanly fading out like real hardware echo
+  (including the SNES's) actually does. `feedback` is clamped to `[0, 0.98]` in `Configure` so the
+  loop can never reach or exceed unity gain and diverge.

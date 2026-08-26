@@ -120,6 +120,7 @@ int main(int argc, char** argv) {
     audioConfig.channels = 2;
     audioConfig.useNullBackend = useNullBackend;
     audioConfig.loFi = config.loFi;
+    audioConfig.delay = config.delay;
     bool renderingToWav = !renderWavPath.empty();
     bool initOk = renderingToWav ? audioEngine.InitializeOffline(audioConfig) : audioEngine.Initialize(audioConfig);
     if (!initOk) {
@@ -135,6 +136,8 @@ int main(int argc, char** argv) {
             def.dutyCycle = instrument.dutyCycle;
             def.arpeggio = instrument.arpeggio;
             def.envelope = instrument.envelope;
+            def.vibrato = instrument.vibrato;
+            def.fm = instrument.fm;
             def.gain = instrument.gain;
             mixer.AddSynthInstrument(instrument.id, def);
         } else {

@@ -49,6 +49,8 @@ TEST_CASE("ConfigLoader parses a full valid composition") {
     CHECK(config.instruments[0].waveform == Waveform::Square);
     CHECK(config.instruments[0].dutyCycle == doctest::Approx(0.5)); // not set in kValidJson -> default
     CHECK(config.instruments[0].arpeggio.semitoneOffsets.empty()); // not set -> disabled
+    CHECK(config.instruments[0].vibrato.depthCents == doctest::Approx(0.0f)); // not set -> disabled
+    CHECK(config.instruments[0].fm.amount == doctest::Approx(0.0f));          // not set -> disabled
     CHECK(config.instruments[1].type == InstrumentType::Sample);
     CHECK(config.instruments[1].file == "samples/snare.wav");
 
@@ -65,6 +67,7 @@ TEST_CASE("ConfigLoader parses a full valid composition") {
     CHECK(config.markovChain.empty());
     CHECK(config.loFi.bitDepth == 16); // not set in kValidJson -> default (no quantization)
     CHECK(config.loFi.holdFactor == 1);
+    CHECK(config.delay.mix == doctest::Approx(0.0f)); // not set in kValidJson -> disabled
 }
 
 TEST_CASE("ConfigLoader defaults a note step's octave to 4 when omitted") {
@@ -208,6 +211,63 @@ TEST_CASE("ConfigLoader parses an explicit loFi section") {
     CompositionConfig config = ConfigLoader::LoadFromString(json);
     CHECK(config.loFi.bitDepth == 4);
     CHECK(config.loFi.holdFactor == 4);
+}
+
+TEST_CASE("ConfigLoader parses an explicit vibrato section for a synth instrument") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [
+        { "id": "lead", "type": "synth", "waveform": "sine",
+          "vibrato": { "rateHz": 6.5, "depthCents": 30 },
+          "envelope": { "attack": 0.01, "decay": 0.1, "sustain": 0.7, "release": 0.2 } }
+      ],
+      "patterns": [ { "id": "p1", "steps": [] } ]
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    REQUIRE(config.instruments.size() == 1);
+    CHECK(config.instruments[0].vibrato.rateHz == doctest::Approx(6.5f));
+    CHECK(config.instruments[0].vibrato.depthCents == doctest::Approx(30.0f));
+}
+
+TEST_CASE("ConfigLoader parses an explicit fm section for a synth instrument") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [
+        { "id": "bell", "type": "synth", "waveform": "sine",
+          "fm": { "ratio": 3.5, "amount": 0.6 },
+          "envelope": { "attack": 0.01, "decay": 0.1, "sustain": 0.7, "release": 0.2 } }
+      ],
+      "patterns": [ { "id": "p1", "steps": [] } ]
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    REQUIRE(config.instruments.size() == 1);
+    CHECK(config.instruments[0].fm.ratio == doctest::Approx(3.5f));
+    CHECK(config.instruments[0].fm.amount == doctest::Approx(0.6f));
+}
+
+TEST_CASE("ConfigLoader parses an explicit delay section") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "steps": [] } ],
+      "delay": { "delayTimeSeconds": 0.18, "feedback": 0.35, "mix": 0.25 }
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    CHECK(config.delay.delayTimeSeconds == doctest::Approx(0.18f));
+    CHECK(config.delay.feedback == doctest::Approx(0.35f));
+    CHECK(config.delay.mix == doctest::Approx(0.25f));
 }
 
 TEST_CASE("ConfigLoader throws when variationStrategy is markovChain but markovChain is missing") {

@@ -4,17 +4,22 @@
 
 #include "engine/Arpeggiator.h"
 #include "engine/Envelope.h"
+#include "engine/FmConfig.h"
 #include "engine/Oscillator.h"
+#include "engine/Vibrato.h"
 
 namespace pmg {
 
 // One synth voice: an oscillator gated by an ADSR envelope, with an
-// optional Arpeggiator modulating its frequency while held. Audio-thread
-// safe; Mixer owns a fixed pool of these and reuses inactive slots.
+// optional Arpeggiator and Vibrato modulating its frequency while held, and
+// an optional second Oscillator phase-modulating the carrier for 2-op FM
+// (only audible when the carrier waveform is Sine -- see
+// Oscillator::NextSample). Audio-thread safe; Mixer owns a fixed pool of
+// these and reuses inactive slots.
 class SynthVoice {
 public:
     void Configure(uint32_t sampleRate, Waveform waveform, float dutyCycle, const ArpeggioConfig& arpeggioConfig,
-                   const ADSRParams& envelopeParams);
+                   const ADSRParams& envelopeParams, const VibratoConfig& vibratoConfig, const FmConfig& fmConfig);
 
     // gateDurationSamples, if >= 0, auto-releases the note (equivalent to
     // calling NoteOff) once that many samples have been rendered; -1 (the
@@ -29,6 +34,9 @@ private:
     Oscillator m_oscillator;
     Envelope m_envelope;
     Arpeggiator m_arpeggiator;
+    Vibrato m_vibrato;
+    Oscillator m_fmModulator;
+    FmConfig m_fm;
     float m_baseFrequency = 440.0f;
     float m_velocity = 1.0f;
     bool m_hasNote = false;

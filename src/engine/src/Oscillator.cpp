@@ -71,13 +71,13 @@ void Oscillator::ShiftLfsr() {
     m_noiseOutput = (m_lfsrState & 1u) ? 1.0 : -1.0;
 }
 
-float Oscillator::NextSample() {
+float Oscillator::NextSample(double phaseModulation) {
     double phaseIncrement = static_cast<double>(m_frequency) / static_cast<double>(m_sampleRate);
 
     float value = 0.0f;
     switch (m_waveform) {
         case Waveform::Sine:
-            value = static_cast<float>(std::sin(2.0 * kPi * m_phase));
+            value = static_cast<float>(std::sin(2.0 * kPi * (m_phase + phaseModulation)));
             break;
         case Waveform::Saw: {
             double naive = 2.0 * m_phase - 1.0;

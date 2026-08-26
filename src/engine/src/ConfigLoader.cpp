@@ -71,6 +71,18 @@ InstrumentConfig ParseInstrument(const json& j) {
             inst.arpeggio.rateHz = arpIt->value("rateHz", 20.0f);
         }
 
+        auto vibIt = j.find("vibrato");
+        if (vibIt != j.end()) {
+            inst.vibrato.rateHz = vibIt->value("rateHz", 5.0f);
+            inst.vibrato.depthCents = vibIt->value("depthCents", 0.0f);
+        }
+
+        auto fmIt = j.find("fm");
+        if (fmIt != j.end()) {
+            inst.fm.ratio = fmIt->value("ratio", 1.0f);
+            inst.fm.amount = fmIt->value("amount", 0.0f);
+        }
+
         json env = RequireField(j, "envelope", "synth instrument '" + inst.id + "'");
         inst.envelope.attackSec = env.value("attack", 0.01f);
         inst.envelope.decaySec = env.value("decay", 0.1f);
@@ -319,6 +331,13 @@ CompositionConfig ConfigLoader::LoadFromString(const std::string& jsonText) {
         json loFi = root["loFi"];
         config.loFi.bitDepth = loFi.value("bitDepth", 16);
         config.loFi.holdFactor = loFi.value("holdFactor", 1);
+    }
+
+    if (root.contains("delay")) {
+        json delay = root["delay"];
+        config.delay.delayTimeSeconds = delay.value("delayTimeSeconds", 0.0f);
+        config.delay.feedback = delay.value("feedback", 0.0f);
+        config.delay.mix = delay.value("mix", 0.0f);
     }
 
     return config;

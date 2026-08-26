@@ -17,6 +17,7 @@ bool AudioEngine::Initialize(const AudioEngineConfig& config) {
 
     m_config = config;
     m_mixer.Configure(m_config.sampleRate);
+    m_delayProcessor.Configure(m_config.delay, m_config.sampleRate);
     m_loFiProcessor.Configure(m_config.loFi);
 
     auto context = std::make_unique<ma_context>();
@@ -60,6 +61,7 @@ bool AudioEngine::InitializeOffline(const AudioEngineConfig& config) {
 
     m_config = config;
     m_mixer.Configure(m_config.sampleRate);
+    m_delayProcessor.Configure(m_config.delay, m_config.sampleRate);
     m_loFiProcessor.Configure(m_config.loFi);
 
     m_initialized = true;
@@ -121,7 +123,7 @@ void AudioEngine::RenderFrames(float* output, uint32_t frameCount) {
 
     uint32_t channels = m_config.channels;
     for (uint32_t frame = 0; frame < frameCount; ++frame) {
-        float sample = m_loFiProcessor.Process(m_mixer.RenderNextSample());
+        float sample = m_loFiProcessor.Process(m_delayProcessor.Process(m_mixer.RenderNextSample()));
         for (uint32_t ch = 0; ch < channels; ++ch) {
             output[frame * channels + ch] = sample;
         }

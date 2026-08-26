@@ -4,6 +4,7 @@
   "startPattern": "intro",
   "variationStrategy": "ruleBased",
   "loFi": { "bitDepth": 4, "holdFactor": 3 },
+  "delay": { "delayTimeSeconds": 0.2, "feedback": 0.3, "mix": 0.2 },
   "instruments": [
     {
       "id": "lead_synth",
@@ -11,6 +12,7 @@
       "waveform": "square",
       "dutyCycle": 0.25,
       "gain": 0.32,
+      "vibrato": { "rateHz": 5.0, "depthCents": 20 },
       "envelope": { "attack": 0.01, "decay": 0.12, "sustain": 0.55, "release": 0.2 }
     },
     {
@@ -18,6 +20,7 @@
       "type": "synth",
       "waveform": "saw",
       "gain": 0.22,
+      "fm": { "ratio": 2.0, "amount": 0.3 },
       "envelope": { "attack": 0.02, "decay": 0.15, "sustain": 0.4, "release": 0.25 }
     },
     {

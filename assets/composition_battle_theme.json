@@ -4,6 +4,7 @@
   "startPattern": "intro",
   "variationStrategy": "markovChain",
   "loFi": { "bitDepth": 6, "holdFactor": 2 },
+  "delay": { "delayTimeSeconds": 0.17, "feedback": 0.25, "mix": 0.18 },
   "instruments": [
     {
       "id": "lead_synth",
@@ -11,6 +12,7 @@
       "waveform": "square",
       "dutyCycle": 0.5,
       "gain": 0.28,
+      "vibrato": { "rateHz": 5.5, "depthCents": 15.0 },
       "envelope": { "attack": 0.002, "decay": 0.05, "sustain": 0.6, "release": 0.03 }
     },
     {

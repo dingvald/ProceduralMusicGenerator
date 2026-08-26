@@ -6,10 +6,13 @@
 #include <vector>
 
 #include "engine/Arpeggiator.h"
+#include "engine/DelayProcessor.h"
 #include "engine/Envelope.h"
+#include "engine/FmConfig.h"
 #include "engine/LoFiProcessor.h"
 #include "engine/Oscillator.h"
 #include "engine/Theory.h"
+#include "engine/Vibrato.h"
 
 namespace pmg {
 
@@ -34,6 +37,8 @@ struct InstrumentConfig {
     float dutyCycle = 0.5f; // only meaningful for waveform == Square
     ArpeggioConfig arpeggio; // empty semitoneOffsets (the default) = disabled
     ADSRParams envelope;
+    VibratoConfig vibrato; // depthCents == 0 (the default) = disabled
+    FmConfig fm;            // amount == 0 (the default) = disabled; only audible when waveform == Sine
 
     // Sample fields (type == Sample)
     std::string file;
@@ -138,7 +143,8 @@ struct CompositionConfig {
     std::string startPattern;
     std::vector<InstrumentConfig> instruments;
     std::vector<PatternConfig> patterns;
-    LoFiConfig loFi; // post-mix bit-depth/sample-hold quantization; defaults to a no-op
+    LoFiConfig loFi;   // post-mix bit-depth/sample-hold quantization; defaults to a no-op
+    DelayConfig delay; // post-mix echo, applied before loFi; mix == 0 (the default) = disabled
     VariationStrategyKind variationStrategy = VariationStrategyKind::RuleBased;
     std::vector<VariationRuleConfig> variationRules; // used when variationStrategy == RuleBased
     MarkovChainConfig markovChain;                   // used when variationStrategy == MarkovChain

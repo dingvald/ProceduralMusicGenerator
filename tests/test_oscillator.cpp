@@ -1,3 +1,4 @@
+#include <cmath>
 #include <vector>
 
 #include "doctest/doctest.h"
@@ -163,6 +164,45 @@ TEST_CASE("Oscillator Noise clocks the LFSR roughly once per period at the confi
     // visible change; this is a loose sanity bound, not an exact count.
     CHECK(changes > 0);
     CHECK(changes < static_cast<int>(frequency));
+}
+
+TEST_CASE("Oscillator Sine NextSample(phaseModulation) matches the closed-form phase-shifted sine") {
+    const uint32_t sampleRate = 48000;
+    const double kPi = 3.14159265358979323846;
+    const double phaseModulations[] = {0.0, 0.1, 0.25, 0.5, -0.3, 1.75};
+
+    for (double pm : phaseModulations) {
+        Oscillator osc;
+        osc.SetSampleRate(sampleRate);
+        osc.SetFrequency(440.0f);
+        osc.SetWaveform(Waveform::Sine);
+
+        // Freshly constructed, so m_phase == 0 for this first call.
+        float sample = osc.NextSample(pm);
+        float expected = static_cast<float>(std::sin(2.0 * kPi * pm));
+        CHECK(sample == doctest::Approx(expected).epsilon(0.0001));
+    }
+}
+
+TEST_CASE("Oscillator non-Sine waveforms ignore phaseModulation") {
+    const uint32_t sampleRate = 48000;
+    Waveform waveforms[] = {Waveform::Saw, Waveform::Square, Waveform::Triangle, Waveform::Noise};
+
+    for (Waveform waveform : waveforms) {
+        Oscillator unmodulated;
+        unmodulated.SetSampleRate(sampleRate);
+        unmodulated.SetFrequency(220.0f);
+        unmodulated.SetWaveform(waveform);
+
+        Oscillator modulated;
+        modulated.SetSampleRate(sampleRate);
+        modulated.SetFrequency(220.0f);
+        modulated.SetWaveform(waveform);
+
+        for (uint32_t i = 0; i < 2000; ++i) {
+            CHECK(modulated.NextSample(0.4) == doctest::Approx(unmodulated.NextSample(0.0)));
+        }
+    }
 }
 
 TEST_CASE("Oscillator Noise LFSR free-runs and is not reseeded by Reset()") {

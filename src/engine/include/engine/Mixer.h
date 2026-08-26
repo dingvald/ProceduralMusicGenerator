@@ -7,10 +7,12 @@
 
 #include "engine/Arpeggiator.h"
 #include "engine/Envelope.h"
+#include "engine/FmConfig.h"
 #include "engine/Oscillator.h"
 #include "engine/SampleAsset.h"
 #include "engine/SamplePlayer.h"
 #include "engine/SynthVoice.h"
+#include "engine/Vibrato.h"
 
 namespace pmg {
 
@@ -21,6 +23,8 @@ struct SynthInstrumentDef {
     float dutyCycle = 0.5f; // only meaningful for Waveform::Square
     ArpeggioConfig arpeggio;
     ADSRParams envelope;
+    VibratoConfig vibrato;
+    FmConfig fm;
     float gain = 1.0f;
 };
 

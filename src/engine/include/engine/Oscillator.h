@@ -35,7 +35,14 @@ public:
     // pseudo-random sequence every time.
     void Reset();
 
-    float NextSample();
+    // phaseModulation perturbs only the *value read* for this sample (the
+    // running phase accumulator is untouched), matching phase-modulation FM
+    // as real 2-op FM chips (Yamaha OPN/OPL) implemented it. Honored only
+    // for Sine -- Saw/Square/Triangle ignore it, since perturbing their
+    // PolyBLEP-corrected phase math would break the band-limiting
+    // correction and doesn't correspond to any real FM chip behavior; Noise
+    // ignores it too, since it isn't phase-driven.
+    float NextSample(double phaseModulation = 0.0);
 
 private:
     static double PolyBlep(double t, double phaseIncrement);
