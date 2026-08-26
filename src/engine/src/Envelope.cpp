@@ -1,9 +1,20 @@
 #include "engine/Envelope.h"
 
+#include <algorithm>
+
 namespace pmg {
 
 void Envelope::Configure(const ADSRParams& params, uint32_t sampleRate) {
     m_params = params;
+    // sustainLevel represents a fraction of the attack-stage peak (which is
+    // always 1.0), so anything outside [0, 1] doesn't have a sensible
+    // meaning: above 1.0 the decay stage's rate flips sign and *climbs*
+    // level past the peak instead of decaying toward it (silently boosting
+    // output, e.g. from a "0.15" vs "1.5" authoring typo), and IsFinished's
+    // one-shot check already treats every value <= 0.0 identically anyway.
+    // Clamping here protects every caller, not just ConfigLoader -- same
+    // reasoning as LoFiProcessor clamping its own bitDepth/holdFactor.
+    m_params.sustainLevel = std::clamp(m_params.sustainLevel, 0.0f, 1.0f);
     m_sampleRate = sampleRate > 0 ? sampleRate : 48000;
 
     m_attackRate = m_params.attackSec > 0.0f

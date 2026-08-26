@@ -1022,6 +1022,15 @@ sibling (15%) or returning to either riff variant (15% each). Render it to a WAV
   `Envelope`'s `Decay` stage transitions straight to `Idle` (instead of holding in `Sustain`) when
   `"sustain"` is `0`, so a percussive one-shot instrument's voice is freed as soon as it finishes
   decaying — typically well before its gate would even elapse.
+- **`Envelope::Configure` clamps `"sustain"` to `[0, 1]`**, same reasoning as `LoFiProcessor`
+  clamping its own `bitDepth`/`holdFactor`: `sustainLevel` is a fraction of the attack stage's peak
+  (always `1.0`), so a value above `1.0` isn't just out of range, it flips the decay rate's sign —
+  `Decay` would *climb* level past the peak instead of settling toward it, silently boosting output
+  from something as small as a `"1.5"` vs `"0.15"` authoring typo. Clamping lives in `Envelope`
+  itself rather than `ConfigLoader` so every caller is protected, not just JSON-sourced instruments.
+  A value at or below `0.0` was already handled correctly before this clamp (the existing one-shot
+  check above treats every non-positive `sustainLevel` identically), so only the `> 1.0` half of
+  this was a real gap.
 - **Arpeggiator**: `SynthVoice` recomputes its oscillator's frequency every sample as
   `baseFrequency * Arpeggiator::NextMultiplier()`, where the multiplier is `2^(semitoneOffset/12)`
   for whichever offset the arpeggio is currently on. `NoteOn()` resets the arpeggio to its first
