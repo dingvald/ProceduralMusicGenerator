@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -172,6 +173,49 @@ struct VariationRuleConfig {
     std::string id;
     std::string scope = "perBar";
     std::vector<VariationOptionConfig> options;
+
+    // Optional runtime-parameter gate (see GameParameters): when
+    // gateParameter is non-empty, this rule is only in scope for a given
+    // bar's VariationEngine::Evaluate() while that parameter's current
+    // value lies within [gateMin, gateMax] -- e.g. a "danger" parameter
+    // gating a rule that only swaps to a more intense pattern once danger
+    // crosses some threshold. An empty gateParameter (the default) means
+    // "no gate" -- the rule is always in scope, exactly like before this
+    // field existed. Only meaningful for RuleBasedVariationStrategy;
+    // MarkovChainVariationStrategy never reads rulesInScope.
+    std::string gateParameter;
+    float gateMin = -std::numeric_limits<float>::infinity();
+    float gateMax = std::numeric_limits<float>::infinity();
+};
+
+// A runtime parameter a host application (e.g. a game) can set live via
+// GameParameters::SetParameter, read by VariationRuleConfig's gate and by
+// GainCrossfadeConfig. Declaring the full set up front (rather than
+// discovering names ad hoc from SetParameter calls) is what lets
+// GameParameters stay a fixed set of atomics with no locking needed after
+// construction -- see GameParameters.h.
+struct GameParameterConfig {
+    std::string name;
+    float defaultValue = 0.0f;
+};
+
+// Maps a runtime parameter's value onto one instrument's Mixer track gain,
+// smoothed over time (see GainCrossfader) rather than snapped instantly --
+// e.g. a tension pad fading in as a "danger" parameter rises from 0 to 1.
+// paramAtGainMin/paramAtGainMax need not be the parameter's own declared
+// range; the mapping between them is linear and clamped outside it. Does
+// not reference GameParameterConfig, matching this codebase's existing
+// preference for independent, uncoupled config blocks (see
+// GeneratedBasslineConfig's header comment) -- the composition author picks
+// matching parameter names by convention, not by cross-reference.
+struct GainCrossfadeConfig {
+    std::string instrument;
+    std::string parameter;
+    float paramAtGainMin = 0.0f;
+    float gainAtMin = 0.0f;
+    float paramAtGainMax = 1.0f;
+    float gainAtMax = 1.0f;
+    float smoothingSeconds = 0.5f; // time to cross the full gainAtMin..gainAtMax range; <= 0 snaps instantly
 };
 
 // One weighted outgoing edge in a Markov chain over pattern identity.
@@ -199,6 +243,8 @@ struct CompositionConfig {
     VariationStrategyKind variationStrategy = VariationStrategyKind::RuleBased;
     std::vector<VariationRuleConfig> variationRules; // used when variationStrategy == RuleBased
     MarkovChainConfig markovChain;                   // used when variationStrategy == MarkovChain
+    std::vector<GameParameterConfig> gameParameters;  // declared runtime parameters; see GameParameters
+    std::vector<GainCrossfadeConfig> gainCrossfades;  // parameter-driven per-instrument gain fades
 };
 
 } // namespace pmg
