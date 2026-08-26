@@ -27,6 +27,13 @@ public:
     void NoteOn(float frequencyHz, float velocity, int gateDurationSamples = -1);
     void NoteOff();
 
+    // Forcibly deactivates the voice outside the normal envelope-release
+    // path, e.g. when the Mixer is being reconfigured for a different
+    // composition (hot reload / track switch) and stale voices need to fall
+    // silent immediately rather than ring out. The next Configure()+NoteOn()
+    // starts the voice cleanly regardless of this call.
+    void Reset();
+
     float RenderSample();
     bool IsActive() const;
 

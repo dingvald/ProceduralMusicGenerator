@@ -14,6 +14,10 @@ class SamplePlayer {
 public:
     void Trigger(std::shared_ptr<const SampleAsset> asset, float gain, float pan = 0.0f);
 
+    // Forcibly deactivates the player outside its normal end-of-sample path
+    // -- see SynthVoice::Reset(), same purpose (Mixer reconfiguration).
+    void Reset();
+
     float RenderSample();
     bool IsActive() const;
     float GetPan() const { return m_pan; }

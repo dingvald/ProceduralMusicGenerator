@@ -47,6 +47,15 @@ public:
 
     void Configure(uint32_t sampleRate);
 
+    // Clears every registered instrument, mute state, and per-track gain,
+    // and force-silences every voice/sample player (see SynthVoice::Reset,
+    // SamplePlayer::Reset). For swapping in a different composition's
+    // instrument set entirely (hot reload / track switch) rather than
+    // incrementally changing one already-loaded composition. Caller is
+    // responsible for ensuring the audio callback isn't concurrently
+    // running -- see the class comment.
+    void Reset();
+
     void AddSynthInstrument(const InstrumentId& id, const SynthInstrumentDef& def);
     void AddSampleInstrument(const InstrumentId& id, const SampleInstrumentDef& def);
 

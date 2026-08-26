@@ -53,6 +53,17 @@ public:
     void Stop();
     void Shutdown();
 
+    // Swaps in a different composition's Mixer instruments / post-mix
+    // loFi+delay settings on an already-Initialize()'d engine -- for hot
+    // reload / streaming through a playlist of tracks without reopening the
+    // device (which stays at its original sampleRate/channels; a track
+    // requesting a different sampleRate keeps playing at the device's rate
+    // instead). Caller must Stop() the device first and Start() it again
+    // after -- Mixer/DelayProcessor/LoFiProcessor are exclusively
+    // audio-thread-owned otherwise (see Mixer's class comment), so mutating
+    // them while the callback could concurrently run would race.
+    void Reconfigure(const LoFiConfig& loFi, const DelayConfig& delay);
+
     Mixer& GetMixer() { return m_mixer; }
     ParameterBus& GetParameterBus() { return m_parameterBus; }
 

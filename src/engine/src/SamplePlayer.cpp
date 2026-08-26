@@ -12,6 +12,11 @@ void SamplePlayer::Trigger(std::shared_ptr<const SampleAsset> asset, float gain,
     m_active = m_asset != nullptr && !m_asset->interleavedPCM.empty();
 }
 
+void SamplePlayer::Reset() {
+    m_active = false;
+    m_asset.reset();
+}
+
 float SamplePlayer::RenderSample() {
     if (!m_active || !m_asset) {
         return 0.0f;

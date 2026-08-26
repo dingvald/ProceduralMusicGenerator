@@ -20,6 +20,19 @@ void Mixer::Configure(uint32_t sampleRate) {
     m_sampleRate = sampleRate > 0 ? sampleRate : 48000;
 }
 
+void Mixer::Reset() {
+    m_synthDefs.clear();
+    m_sampleDefs.clear();
+    m_mutedTracks.clear();
+    m_trackGains.clear();
+    for (auto& voice : m_voices) {
+        voice.Reset();
+    }
+    for (auto& player : m_samplePlayers) {
+        player.Reset();
+    }
+}
+
 void Mixer::AddSynthInstrument(const InstrumentId& id, const SynthInstrumentDef& def) {
     m_synthDefs[id] = def;
 }

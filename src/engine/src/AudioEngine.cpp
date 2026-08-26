@@ -72,6 +72,16 @@ bool AudioEngine::InitializeOffline(const AudioEngineConfig& config) {
     return true;
 }
 
+void AudioEngine::Reconfigure(const LoFiConfig& loFi, const DelayConfig& delay) {
+    m_config.loFi = loFi;
+    m_config.delay = delay;
+    m_mixer.Reset();
+    m_delayProcessorL.Configure(delay, m_config.sampleRate);
+    m_delayProcessorR.Configure(delay, m_config.sampleRate);
+    m_loFiProcessorL.Configure(loFi);
+    m_loFiProcessorR.Configure(loFi);
+}
+
 void AudioEngine::Start() {
     if (m_initialized && m_device) {
         ma_device_start(m_device.get());

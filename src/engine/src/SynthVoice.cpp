@@ -33,6 +33,11 @@ void SynthVoice::NoteOff() {
     m_envelope.NoteOff();
 }
 
+void SynthVoice::Reset() {
+    m_hasNote = false;
+    m_samplesUntilRelease = -1;
+}
+
 float SynthVoice::RenderSample() {
     if (!m_hasNote) {
         return 0.0f;

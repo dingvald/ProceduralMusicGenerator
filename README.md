@@ -52,6 +52,11 @@ A procedural/generative music engine written in modern C++. It supports:
 - **Echo / delay** — a second global post-mix stage, modeled on the SNES S-DSP's built-in digital
   echo buffer, applied before the lo-fi stage so the echo tail gets the same bit-crush as the dry
   signal.
+- **Playlist streaming and hot reload** — `DemoApp` can stream through several composition JSON
+  files as a continuously looping playlist (each one still looping internally exactly as a single
+  track always has), and watches every currently-playing track's file for changes, live-reloading
+  it — new instruments, patterns, and variation rules — without restarting the process or dropping
+  the audio device.
 
 Built with [premake5](https://premake.github.io/); targets Windows via Visual Studio 2026 for
 this pass (see **Build** below for the current premake action caveat).
@@ -176,6 +181,35 @@ This drives the exact same `Sequencer`/`VariationEngine`/`Mixer`/`LoFiProcessor`
 playback (via `AudioEngine::InitializeOffline()` + the now-public `AudioEngine::RenderFrames()`),
 just as fast as the CPU can go rather than paced to a real-time device callback, and encodes the
 output with miniaudio's WAV encoder.
+
+### Streaming a playlist, and hot-reloading tracks
+
+`DemoApp` accepts more than one composition JSON path on the command line, in which case it
+streams through them as a looping playlist instead of playing just one:
+
+```
+DemoApp composition_demo.json composition_battle_theme.json composition_demo_harmony.json --track-seconds 90
+```
+
+Each track plays (and, within itself, loops forever exactly as a single-file run always has) for
+`--track-seconds` (default `60`) before the playlist advances to the next path, wrapping back to
+the first after the last — a continuous, unattended stream rather than a program that exits after
+one composition. A single track behaves exactly as before (it just loops forever; there's nothing
+to advance to).
+
+Whether streaming one track or several, every currently-playing track's JSON file is watched (via
+its filesystem modification time, polled roughly once a second) and **hot-reloaded** on change: edit
+and save the file while `DemoApp` is running and it re-parses it, rebuilds its instruments/
+patterns/variation rules, and switches to the new version — all without restarting the process or
+losing the audio device. A save that produces invalid JSON (or references a missing sample file) is
+reported to stderr and ignored, leaving whatever was already playing untouched, rather than
+crashing or going silent; it's retried automatically the next time the file changes again.
+
+Two things don't change across a track switch (playlist advance or hot reload) because the audio
+device is only ever opened once, at startup, from the first track loaded: the device's sample rate
+and channel count. A later track's own `"sampleRate"` field is ignored in favor of whatever the
+device actually opened at — sample instruments are decoded at that rate regardless of what the
+track's JSON asks for.
 
 ### Running the tests
 
@@ -962,3 +996,37 @@ sibling (15%) or returning to either riff variant (15% each). Render it to a WAV
   no-shared-state `Process(float) -> float` processors, so running two of them is the whole change.
   `channels == 1` still downmixes `(left + right) * 0.5f` for a mono device; `channels > 2` (no
   demo asset exercises this) duplicates the right channel into every slot past index 1.
+- **Playlist streaming and hot reload swap tracks by briefly stopping the device, not by
+  reopening it**: `DemoApp`'s `ActivateTrack` (in `main.cpp`, not the `Engine` lib — this is purely
+  an application-layer concern) is the one place both playlist advance and hot reload go through.
+  It first fully resolves the new track's instruments, including decoding every sample WAV
+  (`BuildInstrumentDefs`), *before* touching the live `Mixer` — a track with a typo'd sample path or
+  malformed JSON is rejected with an stderr message and the previous, working track just keeps
+  playing, rather than the switch tearing down a working `Mixer` state partway through. Only once
+  that succeeds does it call `AudioEngine::Stop()` (blocks until the real-time callback thread is
+  parked), `AudioEngine::Reconfigure()` (new `Mixer::Reset()` clears every instrument/mute/gain and
+  force-silences every voice/sample player via the new `SynthVoice::Reset()`/`SamplePlayer::Reset()`,
+  then reconfigures both post-mix `DelayProcessor`s/`LoFiProcessor`s for the new track's `"loFi"`/
+  `"delay"`), applies the new instrument set, and rebuilds a fresh `VariationEngine`+`Sequencer` for
+  the new `CompositionConfig` before calling `AudioEngine::Start()` again. This needed a handful of
+  small, purely-additive `Engine` seams (`Mixer::Reset`, `SynthVoice::Reset`, `SamplePlayer::Reset`,
+  `AudioEngine::Reconfigure`) precisely because `Mixer`/`DelayProcessor`/`LoFiProcessor` are
+  audio-thread-owned (see `Mixer`'s class comment) — mutating them while the callback could fire
+  concurrently would race, so `Stop()`/`Start()` bracketing the swap is what makes it safe rather
+  than needing a lock or routing instrument changes through `ParameterBus`. The device itself
+  (sample rate, channel count) is opened exactly once, from the first track loaded, and never
+  reopened — a later track's own `"sampleRate"` is ignored (sample instruments decode at
+  `AudioEngine::GetSampleRate()`, the device's actual rate, not the track's requested one) since
+  reopening a real device mid-stream would be far more disruptive than the brief stop/start this
+  approach costs.
+- **Hot reload polls file modification time on the control thread, not a filesystem watcher**:
+  `main.cpp` checks `std::filesystem::last_write_time` for the currently-active track's path about
+  once a second (inside the same loop that calls `Sequencer::Update()`), which is simple, portable,
+  and plenty responsive for a human editing and saving a JSON file by hand — a real filesystem
+  notification API (inotify/ReadDirectoryChangesW) would be platform-specific for no practical
+  benefit here. `SafeMtime` swallows a momentarily-missing file (many editors unlink-and-rewrite on
+  save) as `file_time_type::min()` instead of throwing, so a reload attempt only ever fires once the
+  file has a real, changed mtime again. A `lastFailedMtime` guard stops a broken save from being
+  retried every single poll — once a given mtime has failed to load, it's not retried again until
+  the file changes (gets a new mtime) once more, so fixing a typo and re-saving is what triggers the
+  next attempt rather than a 1-second retry spam.
