@@ -31,6 +31,12 @@ struct InstrumentConfig {
     std::string id;
     InstrumentType type = InstrumentType::Synth;
     float gain = 1.0f;
+    // -1.0 hard left .. 0.0 center (default) .. +1.0 hard right. Linear pan
+    // law, not equal-power -- period hardware (Game Boy NR51 hard L/R/both
+    // routing, SNES per-voice L/R volume registers) never did smooth
+    // psychoacoustic panning either, and pan == 0.0 must reproduce the
+    // pre-panning mono-summed loudness exactly (gain 1.0 on both channels).
+    float pan = 0.0f;
 
     // Synth fields (type == Synth)
     Waveform waveform = Waveform::Sine;
@@ -99,6 +105,49 @@ struct GeneratedRhythmConfig {
     float gate = 0.1f;
 };
 
+// Config for a deterministic, explicit-progression chord generator (see
+// ChordGenerator::GenerateChords). Fully deterministic given `degrees` (no
+// RandomSource), like RhythmGenerator's hit placement. Each entry of
+// `degrees` becomes one stacked chord (root/third/fifth, scale degrees
+// d/d+2/d+4, plus d+6 when seventh == true) held for chordLengthBeats, all
+// tones emitted as separate StepConfigs at the same beat on `instrument` --
+// Mixer::NoteOn already scans a free-voice pool per call, so simultaneous
+// same-beat/same-instrument steps play as a chord with no engine changes.
+// Best suited to a 7-tone scale (Major/NaturalMinor/HarmonicMinor/Dorian/
+// Mixolydian); pentatonic/Blues scales are accepted but the d+2/d+4/d+6
+// stacking won't land on conventional triad intervals.
+struct GeneratedChordConfig {
+    std::string instrument;
+    NoteName key = NoteName::C;
+    Scale scale = Scale::Major;
+    int baseOctave = 3;
+    std::vector<int> degrees;        // e.g. {0,3,4,0} == I-IV-V-I; required, non-empty
+    double chordLengthBeats = 4.0;   // beats each progression entry occupies
+    bool seventh = false;            // false = triad; true = adds the d+6 seventh
+    float velocity = 0.7f;
+    float gateFraction = 0.9f;       // fraction of chordLengthBeats held before release
+};
+
+// Config for a procedurally-walked bass line locked to the SAME explicit
+// scale-degree progression as a GeneratedChordConfig (see
+// BasslineGenerator::GenerateBassline). Deliberately duplicates
+// degrees/key/scale/baseOctave/chordLengthBeats rather than referencing
+// GeneratedChordConfig, matching this codebase's independent, uncoupled
+// generator-block philosophy; keep the two in sync manually when pairing
+// them under one progression.
+struct GeneratedBasslineConfig {
+    std::string instrument;
+    NoteName key = NoteName::C;
+    Scale scale = Scale::Major;
+    int baseOctave = 2;
+    std::vector<int> degrees;             // same progression as the paired chord block
+    double chordLengthBeats = 4.0;        // must match the chord progression's span
+    double noteLengthBeats = 1.0;         // subdivision within each chord span
+    float passingToneProbability = 0.2f;  // chance a non-first subdivision leaves the root
+    float velocity = 0.75f;
+    float gateFraction = 0.8f;
+};
+
 struct PatternConfig {
     std::string id;
     int lengthBars = 1;
@@ -106,6 +155,8 @@ struct PatternConfig {
     std::vector<MelodyConfig> melodies;
     std::vector<GeneratedMelodyConfig> generatedMelodies;
     std::vector<GeneratedRhythmConfig> generatedRhythms;
+    std::vector<GeneratedChordConfig> generatedChords;
+    std::vector<GeneratedBasslineConfig> generatedBasslines;
 };
 
 enum class VariationOptionType { NoOp, SwapPattern, SetTrackMuted, AddLayer, RemoveLayer };

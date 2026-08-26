@@ -18,7 +18,11 @@ namespace pmg {
 
 struct AudioEngineConfig {
     uint32_t sampleRate = 48000;
-    uint32_t channels = 2;       // device output channel count; the mono mixer sum is duplicated across channels
+    // Device output channel count. channels == 1 downmixes stereo to mono;
+    // channels >= 2 writes real left/right into slots 0/1 (per-instrument
+    // pan, see InstrumentConfig::pan) and duplicates the right channel into
+    // any slot beyond 2 (untested beyond stereo -- no demo asset uses it).
+    uint32_t channels = 2;
     bool useNullBackend = false; // headless smoke-test path (see README) - no real audio hardware required
     LoFiConfig loFi;             // post-mix bit-depth/sample-hold quantization; defaults to a no-op
     DelayConfig delay;           // post-mix echo, applied before loFi; defaults to a no-op
@@ -67,8 +71,14 @@ private:
 
     AudioEngineConfig m_config;
     Mixer m_mixer;
-    DelayProcessor m_delayProcessor;
-    LoFiProcessor m_loFiProcessor;
+    // One independent instance per channel so each channel's echo/lofi state
+    // stays separate and the stereo image from Mixer::RenderNextStereoSample
+    // survives the post-mix effects chain instead of collapsing to a mono
+    // pre-effects sum.
+    DelayProcessor m_delayProcessorL;
+    DelayProcessor m_delayProcessorR;
+    LoFiProcessor m_loFiProcessorL;
+    LoFiProcessor m_loFiProcessorR;
     ParameterBus m_parameterBus;
     std::atomic<uint64_t> m_framesProcessed{0};
     std::unique_ptr<ma_context> m_context;

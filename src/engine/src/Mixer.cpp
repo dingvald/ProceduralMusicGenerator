@@ -2,6 +2,20 @@
 
 namespace pmg {
 
+namespace {
+
+// Linear (not equal-power) pan law: at pan == 0.0 both gains are 1.0,
+// exactly reproducing the old mono-summed loudness for any instrument that
+// never sets pan. Real chip hardware (Game Boy NR51 hard L/R/both routing,
+// SNES per-voice L/R volume registers) never did smooth psychoacoustic
+// panning either, so a plain linear law is the period-plausible choice.
+void PanGains(float pan, float& leftGain, float& rightGain) {
+    leftGain = pan <= 0.0f ? 1.0f : 1.0f - pan;
+    rightGain = pan >= 0.0f ? 1.0f : 1.0f + pan;
+}
+
+} // namespace
+
 void Mixer::Configure(uint32_t sampleRate) {
     m_sampleRate = sampleRate > 0 ? sampleRate : 48000;
 }
@@ -66,7 +80,7 @@ void Mixer::TriggerSample(const InstrumentId& instrument, float gainMultiplier) 
 
     for (auto& player : m_samplePlayers) {
         if (!player.IsActive()) {
-            player.Trigger(defIt->second.asset, defIt->second.gain * gainMultiplier);
+            player.Trigger(defIt->second.asset, defIt->second.gain * gainMultiplier, defIt->second.pan);
             return;
         }
     }
@@ -81,8 +95,9 @@ void Mixer::SetTrackGain(const InstrumentId& track, float gain) {
     m_trackGains[track] = gain;
 }
 
-float Mixer::RenderNextSample() {
-    float output = 0.0f;
+void Mixer::RenderNextStereoSample(float& left, float& right) {
+    left = 0.0f;
+    right = 0.0f;
 
     for (size_t i = 0; i < kMaxSynthVoices; ++i) {
         if (!m_voices[i].IsActive()) {
@@ -91,17 +106,31 @@ float Mixer::RenderNextSample() {
         const InstrumentId& instrument = m_voiceInstrument[i];
         auto defIt = m_synthDefs.find(instrument);
         float instrumentGain = defIt != m_synthDefs.end() ? defIt->second.gain : 1.0f;
-        output += m_voices[i].RenderSample() * instrumentGain * TrackGain(instrument);
+        float pan = defIt != m_synthDefs.end() ? defIt->second.pan : 0.0f;
+
+        float sample = m_voices[i].RenderSample() * instrumentGain * TrackGain(instrument);
+        float leftGain, rightGain;
+        PanGains(pan, leftGain, rightGain);
+        left += sample * leftGain;
+        right += sample * rightGain;
     }
 
     for (auto& player : m_samplePlayers) {
         if (!player.IsActive()) {
             continue;
         }
-        output += player.RenderSample();
+        float sample = player.RenderSample();
+        float leftGain, rightGain;
+        PanGains(player.GetPan(), leftGain, rightGain);
+        left += sample * leftGain;
+        right += sample * rightGain;
     }
+}
 
-    return output;
+float Mixer::RenderNextSample() {
+    float left, right;
+    RenderNextStereoSample(left, right);
+    return (left + right) * 0.5f;
 }
 
 } // namespace pmg

@@ -17,8 +17,10 @@ bool AudioEngine::Initialize(const AudioEngineConfig& config) {
 
     m_config = config;
     m_mixer.Configure(m_config.sampleRate);
-    m_delayProcessor.Configure(m_config.delay, m_config.sampleRate);
-    m_loFiProcessor.Configure(m_config.loFi);
+    m_delayProcessorL.Configure(m_config.delay, m_config.sampleRate);
+    m_delayProcessorR.Configure(m_config.delay, m_config.sampleRate);
+    m_loFiProcessorL.Configure(m_config.loFi);
+    m_loFiProcessorR.Configure(m_config.loFi);
 
     auto context = std::make_unique<ma_context>();
     ma_context_config contextConfig = ma_context_config_init();
@@ -61,8 +63,10 @@ bool AudioEngine::InitializeOffline(const AudioEngineConfig& config) {
 
     m_config = config;
     m_mixer.Configure(m_config.sampleRate);
-    m_delayProcessor.Configure(m_config.delay, m_config.sampleRate);
-    m_loFiProcessor.Configure(m_config.loFi);
+    m_delayProcessorL.Configure(m_config.delay, m_config.sampleRate);
+    m_delayProcessorR.Configure(m_config.delay, m_config.sampleRate);
+    m_loFiProcessorL.Configure(m_config.loFi);
+    m_loFiProcessorR.Configure(m_config.loFi);
 
     m_initialized = true;
     return true;
@@ -123,9 +127,19 @@ void AudioEngine::RenderFrames(float* output, uint32_t frameCount) {
 
     uint32_t channels = m_config.channels;
     for (uint32_t frame = 0; frame < frameCount; ++frame) {
-        float sample = m_loFiProcessor.Process(m_delayProcessor.Process(m_mixer.RenderNextSample()));
-        for (uint32_t ch = 0; ch < channels; ++ch) {
-            output[frame * channels + ch] = sample;
+        float left, right;
+        m_mixer.RenderNextStereoSample(left, right);
+        left = m_loFiProcessorL.Process(m_delayProcessorL.Process(left));
+        right = m_loFiProcessorR.Process(m_delayProcessorR.Process(right));
+
+        if (channels == 1) {
+            output[frame] = (left + right) * 0.5f;
+        } else {
+            output[frame * channels + 0] = left;
+            output[frame * channels + 1] = right;
+            for (uint32_t ch = 2; ch < channels; ++ch) {
+                output[frame * channels + ch] = right;
+            }
         }
     }
 

@@ -139,12 +139,14 @@ int main(int argc, char** argv) {
             def.vibrato = instrument.vibrato;
             def.fm = instrument.fm;
             def.gain = instrument.gain;
+            def.pan = instrument.pan;
             mixer.AddSynthInstrument(instrument.id, def);
         } else {
             try {
                 SampleInstrumentDef def;
                 def.asset = LoadSampleAsset(instrument.file, config.sampleRate);
                 def.gain = instrument.gain;
+                def.pan = instrument.pan;
                 mixer.AddSampleInstrument(instrument.id, def);
             } catch (const std::exception& e) {
                 std::cerr << "Failed to load sample instrument '" << instrument.id << "': " << e.what() << "\n";

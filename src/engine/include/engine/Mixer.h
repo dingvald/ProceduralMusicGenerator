@@ -26,11 +26,13 @@ struct SynthInstrumentDef {
     VibratoConfig vibrato;
     FmConfig fm;
     float gain = 1.0f;
+    float pan = 0.0f; // -1.0 left .. 0.0 center .. +1.0 right; see InstrumentConfig::pan
 };
 
 struct SampleInstrumentDef {
     std::shared_ptr<const SampleAsset> asset;
     float gain = 1.0f;
+    float pan = 0.0f; // -1.0 left .. 0.0 center .. +1.0 right; see InstrumentConfig::pan
 };
 
 // Owns a fixed pool of SynthVoice/SamplePlayer slots and per-track
@@ -63,7 +65,14 @@ public:
     void SetTrackMuted(const InstrumentId& track, bool muted);
     void SetTrackGain(const InstrumentId& track, float gain);
 
-    // Sums all active voices/sample players into one mono output sample.
+    // Sums all active voices/sample players into stereo (left, right) using
+    // each instrument's pan (linear law -- pan == 0.0 gives both channels
+    // gain 1.0, i.e. the same loudness as the old mono sum).
+    void RenderNextStereoSample(float& left, float& right);
+
+    // Mono downmix of RenderNextStereoSample: (left + right) * 0.5f. Exactly
+    // reproduces the pre-panning mono output for any instrument set that
+    // never sets pan (left == right in that case).
     float RenderNextSample();
 
 private:

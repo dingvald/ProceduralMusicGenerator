@@ -110,6 +110,91 @@ TEST_CASE("Mixer reuses voices for a one-shot (zero-sustain) percussion instrume
     }
 }
 
+TEST_CASE("Mixer pan defaults to center: RenderNextStereoSample matches RenderNextSample on both channels") {
+    Mixer mixer;
+    const uint32_t sampleRate = 1000;
+    mixer.Configure(sampleRate);
+
+    SynthInstrumentDef def;
+    def.waveform = Waveform::Sine;
+    def.envelope.attackSec = 0.0f;
+    def.envelope.decaySec = 0.0f;
+    def.envelope.sustainLevel = 1.0f;
+    def.envelope.releaseSec = 0.005f;
+    def.gain = 1.0f;
+    mixer.AddSynthInstrument("centered", def);
+    mixer.NoteOn("centered", 100.0f, 1.0f);
+
+    float left, right;
+    mixer.RenderNextStereoSample(left, right);
+    CHECK(left == doctest::Approx(right));
+}
+
+TEST_CASE("Mixer hard-left pan silences the right channel") {
+    Mixer mixer;
+    const uint32_t sampleRate = 1000;
+    mixer.Configure(sampleRate);
+
+    SynthInstrumentDef def;
+    def.waveform = Waveform::Sine;
+    def.envelope.attackSec = 0.0f;
+    def.envelope.decaySec = 0.0f;
+    def.envelope.sustainLevel = 1.0f;
+    def.envelope.releaseSec = 0.005f;
+    def.gain = 1.0f;
+    def.pan = -1.0f;
+    mixer.AddSynthInstrument("panned_left", def);
+    mixer.NoteOn("panned_left", 100.0f, 1.0f);
+
+    bool heardLeft = false;
+    for (int i = 0; i < 20; ++i) {
+        float left, right;
+        mixer.RenderNextStereoSample(left, right);
+        if (std::fabs(left) > 0.01f) {
+            heardLeft = true;
+        }
+        CHECK(std::fabs(right) < 1e-6f);
+    }
+    CHECK(heardLeft);
+}
+
+TEST_CASE("Mixer sums independently-panned instruments per channel") {
+    Mixer mixer;
+    const uint32_t sampleRate = 1000;
+    mixer.Configure(sampleRate);
+
+    SynthInstrumentDef left;
+    left.waveform = Waveform::Sine;
+    left.envelope.attackSec = 0.0f;
+    left.envelope.decaySec = 0.0f;
+    left.envelope.sustainLevel = 1.0f;
+    left.envelope.releaseSec = 0.005f;
+    left.pan = -1.0f;
+    mixer.AddSynthInstrument("left", left);
+
+    SynthInstrumentDef right;
+    right.waveform = Waveform::Sine;
+    right.envelope.attackSec = 0.0f;
+    right.envelope.decaySec = 0.0f;
+    right.envelope.sustainLevel = 1.0f;
+    right.envelope.releaseSec = 0.005f;
+    right.pan = 1.0f;
+    mixer.AddSynthInstrument("right", right);
+
+    mixer.NoteOn("left", 100.0f, 1.0f);
+    mixer.NoteOn("right", 150.0f, 1.0f);
+
+    bool heardBoth = false;
+    for (int i = 0; i < 20; ++i) {
+        float l, r;
+        mixer.RenderNextStereoSample(l, r);
+        if (std::fabs(l) > 0.01f && std::fabs(r) > 0.01f) {
+            heardBoth = true;
+        }
+    }
+    CHECK(heardBoth);
+}
+
 TEST_CASE("Mixer suppresses NoteOn on a muted track") {
     Mixer mixer;
     mixer.Configure(1000);

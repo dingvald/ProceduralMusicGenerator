@@ -4,10 +4,11 @@
 
 namespace pmg {
 
-void SamplePlayer::Trigger(std::shared_ptr<const SampleAsset> asset, float gain) {
+void SamplePlayer::Trigger(std::shared_ptr<const SampleAsset> asset, float gain, float pan) {
     m_asset = std::move(asset);
     m_frameIndex = 0;
     m_gain = gain;
+    m_pan = pan;
     m_active = m_asset != nullptr && !m_asset->interleavedPCM.empty();
 }
 

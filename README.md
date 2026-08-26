@@ -34,6 +34,15 @@ A procedural/generative music engine written in modern C++. It supports:
   (scale-constrained random-walk melodies, expanded at load time from a key/scale/RNG seed instead
   of hand-written notes) and `"generatedRhythms"` (Euclidean-rhythm percussion, via Bjorklund's
   algorithm). Optionally seeded for fully reproducible output.
+- **Procedural chord/bassline generation** — a pattern can include `"generatedChords"` (a
+  deterministic scale-degree progression expanded into stacked same-beat triads/sevenths, e.g.
+  `[0, 5, 3, 4]` for a I-vi-IV-V progression) and `"generatedBasslines"` (an RNG-driven bass line
+  locked to that same progression, anchored on the chord root with occasional third/fifth passing
+  tones). Together they give a composition harmonic structure beyond a single melodic line.
+- **Stereo panning** — every instrument accepts an optional `"pan"` field (`-1.0` hard left to
+  `+1.0` hard right, default `0.0` center), mixed with a plain linear pan law rather than a
+  psychoacoustic one — real chip hardware (Game Boy's hard L/R/both channel routing, the SNES
+  S-DSP's per-voice L/R volume registers) never did smooth equal-power panning either.
 - **Vibrato** — an optional per-instrument sine-shaped pitch LFO, the same technique chip-tracker
   auto-vibrato used to add wobble to a held note.
 - **FM synthesis** — an optional 2-operator phase-modulation layer (a sine modulator perturbing a
@@ -283,8 +292,70 @@ unless a seed is given) for everything else that's randomized. Each block seeds 
 e.g. a melody and its accompanying rhythm can be regenerated separately without disturbing each
 other.
 
-A pattern can freely mix `"steps"`, `"melodies"`, `"generatedMelodies"`, and `"generatedRhythms"`
-in any combination.
+A pattern can freely mix `"steps"`, `"melodies"`, `"generatedMelodies"`, `"generatedRhythms"`,
+`"generatedChords"`, and `"generatedBasslines"` in any combination.
+
+### Procedural chords and basslines
+
+```json
+"generatedChords": [
+  { "instrument": "pad", "key": "C", "scale": "major", "baseOctave": 4,
+    "degrees": [0, 5, 3, 4], "chordLengthBeats": 4.0, "seventh": false,
+    "velocity": 0.55, "gateFraction": 0.85 }
+],
+"generatedBasslines": [
+  { "instrument": "bass_synth", "key": "C", "scale": "major", "baseOctave": 2,
+    "degrees": [0, 5, 3, 4], "chordLengthBeats": 4.0, "noteLengthBeats": 1.0,
+    "passingToneProbability": 0.25, "velocity": 0.8, "seed": 11 }
+]
+```
+
+See `assets/composition_demo_harmony.json` for a full worked example (a generated I-vi-IV-V pad
+progression, a bassline locked to it, a generated pentatonic lead on top, generated kick/hi-hat
+rhythms, and per-instrument stereo panning), runnable via `DemoApp composition_demo_harmony.json
+--render-wav harmony.wav`.
+
+**`"generatedChords"`** — fully deterministic given `"degrees"` (no RNG involved, same shape as
+`"generatedRhythms"`'s hit placement): each entry of `"degrees"` is a scale degree (`0` = the
+tonic, `1` = the second, etc. — e.g. `[0, 5, 3, 4]` in C major is a I-vi-IV-V progression) that
+becomes one stacked chord held for `"chordLengthBeats"` (default `4.0`). A chord is built by
+stacking thirds on top of that degree (root/third/fifth — scale degrees `d`, `d+2`, `d+4`), plus a
+seventh (`d+6`) when `"seventh"` is `true`; every tone is emitted as its own step sharing the
+chord's beat and `"instrument"` — the Mixer already lets several same-beat steps on one instrument
+sound together as a chord, so no further engine support was needed. Best suited to a seven-tone
+scale (`"major"`, `"naturalMinor"`, `"harmonicMinor"`, `"dorian"`, `"mixolydian"`); the five-tone
+pentatonic/blues scales are accepted but the `d+2`/`d+4`/`d+6` stacking won't land on conventional
+triad intervals.
+
+**`"generatedBasslines"`** — an RNG-driven walk locked to the *same* `"degrees"` progression
+(specify it again on the bassline block — see note below), so the bass stays harmonically paired
+with a `"generatedChords"` block. Each progression entry's `"chordLengthBeats"` span is subdivided
+into `"noteLengthBeats"`-sized slots; the first slot of every span always plays that entry's chord
+root, and later slots roll `"passingToneProbability"` (default `0.2`) to occasionally move to the
+third or fifth instead (weighted toward the root, like `"generatedMelodies"`'s smooth-contour
+weighting) before returning to the root at the start of the next span.
+
+`"generatedChords"` and `"generatedBasslines"` don't reference each other — each independently
+specifies its own `"key"`/`"scale"`/`"baseOctave"`/`"degrees"`/`"chordLengthBeats"`, matching how
+`"generatedMelodies"` and `"generatedRhythms"` are already uncoupled from one another. Pairing a
+chord progression with a bassline means repeating the same `"degrees"`/`"chordLengthBeats"` on
+both blocks, kept in sync by the composition author.
+
+### Stereo panning
+
+Every instrument (synth or sample) accepts an optional `"pan"` field:
+
+```json
+{ "id": "pad", "type": "synth", "waveform": "square", "pan": -0.4, "...": "..." }
+```
+
+`-1.0` is hard left, `+1.0` is hard right, and `0.0` (the default) is dead center. Panning uses a
+linear law — `leftGain = pan <= 0 ? 1 : 1 - pan`, `rightGain = pan >= 0 ? 1 : 1 + pan` — rather
+than an equal-power one, so `"pan": 0.0` reproduces the exact pre-panning mono-summed loudness
+(gain `1.0` on both channels) for any composition that never sets it. A smooth psychoacoustic pan
+curve would also be out of place here anyway: real chip hardware never had one either (the Game
+Boy hard-routes each channel to left, right, or both via its `NR51` register; the SNES S-DSP gives
+each voice independent, but not equal-power, L/R volume registers).
 
 A synth instrument with `"waveform": "square"` accepts an optional `"dutyCycle"` field (0-1,
 default `0.5`), matching a chip pulse channel's duty setting — e.g. `0.125`, `0.25`, `0.5`, and
@@ -829,6 +900,25 @@ sibling (15%) or returning to either riff variant (15% each). Render it to a WAV
   to `std::random_device` like the rest of the engine's otherwise-non-reproducible RNG usage) — so
   a fixed seed makes exactly one block's output reproducible without needing any shared RNG state
   threaded through `ConfigLoader`'s otherwise-stateless parsing.
+- **Chords need no new playback machinery, only a new generator**: `ChordGenerator::GenerateChords`
+  follows the exact same pure-function/no-JSON-dependency shape as `MelodyGenerator`/
+  `RhythmGenerator`, except it takes no `RandomSource` — it's fully deterministic given
+  `"degrees"`, the same way `GenerateRhythm` is fully deterministic given `steps`/`pulses`. What
+  makes a *chord* work is something that already existed: `Mixer::NoteOn` scans its whole
+  `kMaxSynthVoices` pool for a free voice on every call, so several `StepConfig`s sharing one beat
+  and one `instrument` id already play back as simultaneous notes with zero Mixer/Sequencer
+  changes — `GenerateChords` just needed to emit one `StepConfig` per stacked-third tone (root,
+  third, fifth, plus an optional seventh) instead of one per note.
+  `BasslineGenerator::GenerateBassline` reuses `RandomSource` the way `MelodyGenerator` does, but
+  its weighted table (`kChordToneOffsets`/`kChordToneWeights`) only ever picks among the *current*
+  chord's own root/third/fifth rather than an unconstrained scale-degree delta, and its first slot
+  in every chord span is hard-coded to the root (no roll at all) so the bass line always re-anchors
+  itself at the start of each new chord regardless of where a probabilistic walk left it. Neither
+  generator references the other's config struct — `GeneratedChordConfig` and
+  `GeneratedBasslineConfig` each independently carry their own `degrees`/`key`/`scale`/
+  `baseOctave`/`chordLengthBeats`, matching how `"generatedMelodies"` and `"generatedRhythms"`
+  already don't reference each other; pairing a chord progression with a bassline is the
+  composition author's job (repeat the same values on both blocks), not the engine's.
 - **Vibrato and FM compose through the same per-sample seam as the arpeggiator**:
   `SynthVoice::RenderSample` computes one `carrierFreq = baseFrequency *
   Arpeggiator::NextMultiplier() * Vibrato::NextMultiplier()` each sample, so all three frequency
@@ -850,12 +940,25 @@ sibling (15%) or returning to either riff variant (15% each). Render it to a WAV
   `std::array<float, 96000>` (2 seconds at 48kHz) sized for the longest delay it supports, not a
   `std::vector` sized to the requested delay, so `Process` never allocates regardless of what a
   composition asks for; a request beyond that length is silently clamped rather than growing the
-  buffer. `AudioEngine::RenderFrames` chains `m_loFiProcessor.Process(m_delayProcessor.Process(...))`
-  — delay runs first so its echo tail passes through the same bit-crush as the dry signal in the
-  final output, rather than sounding cleaner than everything else. The feedback loop itself is
-  *not* re-quantized on each repeat (feedback accumulates at full float precision inside
-  `DelayProcessor`, only getting bit-crushed once, at the very end): quantizing every round trip
-  was considered and rejected, since it would compound quantization noise each repeat, making a
-  decaying echo sound *crunchier* over time instead of cleanly fading out like real hardware echo
-  (including the SNES's) actually does. `feedback` is clamped to `[0, 0.98]` in `Configure` so the
-  loop can never reach or exceed unity gain and diverge.
+  buffer. `AudioEngine::RenderFrames` chains, per channel,
+  `m_loFiProcessorX.Process(m_delayProcessorX.Process(...))` — delay runs first so its echo tail
+  passes through the same bit-crush as the dry signal in the final output, rather than sounding
+  cleaner than everything else. The feedback loop itself is *not* re-quantized on each repeat
+  (feedback accumulates at full float precision inside `DelayProcessor`, only getting bit-crushed
+  once, at the very end): quantizing every round trip was considered and rejected, since it would
+  compound quantization noise each repeat, making a decaying echo sound *crunchier* over time
+  instead of cleanly fading out like real hardware echo (including the SNES's) actually does.
+  `feedback` is clamped to `[0, 0.98]` in `Configure` so the loop can never reach or exceed unity
+  gain and diverge.
+- **Stereo panning splits the signal at the Mixer, not at the output stage**: `Mixer` gained
+  `RenderNextStereoSample(left, right)`, which loops the exact same active-voice/sample-player
+  logic `RenderNextSample()` always has, but applies each instrument's linear pan gain into
+  separate `left`/`right` accumulators instead of summing into one value (`RenderNextSample()` now
+  just calls it and averages the two, so its signature and every existing call site — including
+  every test — are untouched). `AudioEngine` was changed to own two independent
+  `DelayProcessor`/`LoFiProcessor` instances (one per channel) rather than one shared mono pair, so
+  a panned instrument's echo tail and bit-crush stay on its own side of the stereo image instead of
+  collapsing to a mono pre-effects sum — both classes were already cheap, single-stream,
+  no-shared-state `Process(float) -> float` processors, so running two of them is the whole change.
+  `channels == 1` still downmixes `(left + right) * 0.5f` for a mono device; `channels > 2` (no
+  demo asset exercises this) duplicates the right channel into every slot past index 1.

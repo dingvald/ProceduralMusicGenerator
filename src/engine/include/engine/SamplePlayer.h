@@ -12,15 +12,17 @@ namespace pmg {
 // never called directly from the control thread.
 class SamplePlayer {
 public:
-    void Trigger(std::shared_ptr<const SampleAsset> asset, float gain);
+    void Trigger(std::shared_ptr<const SampleAsset> asset, float gain, float pan = 0.0f);
 
     float RenderSample();
     bool IsActive() const;
+    float GetPan() const { return m_pan; }
 
 private:
     std::shared_ptr<const SampleAsset> m_asset;
     size_t m_frameIndex = 0;
     float m_gain = 1.0f;
+    float m_pan = 0.0f;
     bool m_active = false;
 };
 

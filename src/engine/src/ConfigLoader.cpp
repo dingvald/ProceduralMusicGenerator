@@ -5,6 +5,8 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "engine/BasslineGenerator.h"
+#include "engine/ChordGenerator.h"
 #include "engine/MelodyGenerator.h"
 #include "engine/NoteStringParser.h"
 #include "engine/RandomSource.h"
@@ -55,6 +57,7 @@ InstrumentConfig ParseInstrument(const json& j) {
     inst.id = RequireField(j, "id", "instrument").get<std::string>();
     std::string typeStr = RequireField(j, "type", "instrument '" + inst.id + "'").get<std::string>();
     inst.gain = j.value("gain", 1.0f);
+    inst.pan = j.value("pan", 0.0f);
 
     if (typeStr == "synth") {
         inst.type = InstrumentType::Synth;
@@ -174,6 +177,47 @@ GeneratedRhythmConfig ParseGeneratedRhythm(const json& j, const std::string& pat
     return gen;
 }
 
+GeneratedChordConfig ParseGeneratedChord(const json& j, const std::string& patternId) {
+    GeneratedChordConfig gen;
+    gen.instrument =
+        RequireField(j, "instrument", "generatedChord in pattern '" + patternId + "'").get<std::string>();
+    gen.key = Theory::ParseNoteName(j.value("key", std::string("C")));
+    gen.scale = Theory::ParseScale(j.value("scale", std::string("major")));
+    gen.baseOctave = j.value("baseOctave", 3);
+
+    json degrees = RequireField(j, "degrees", "generatedChord in pattern '" + patternId + "'");
+    for (const auto& degreeJson : degrees) {
+        gen.degrees.push_back(degreeJson.get<int>());
+    }
+
+    gen.chordLengthBeats = j.value("chordLengthBeats", 4.0);
+    gen.seventh = j.value("seventh", false);
+    gen.velocity = j.value("velocity", 0.7f);
+    gen.gateFraction = j.value("gateFraction", 0.9f);
+    return gen;
+}
+
+GeneratedBasslineConfig ParseGeneratedBassline(const json& j, const std::string& patternId) {
+    GeneratedBasslineConfig gen;
+    gen.instrument =
+        RequireField(j, "instrument", "generatedBassline in pattern '" + patternId + "'").get<std::string>();
+    gen.key = Theory::ParseNoteName(j.value("key", std::string("C")));
+    gen.scale = Theory::ParseScale(j.value("scale", std::string("major")));
+    gen.baseOctave = j.value("baseOctave", 2);
+
+    json degrees = RequireField(j, "degrees", "generatedBassline in pattern '" + patternId + "'");
+    for (const auto& degreeJson : degrees) {
+        gen.degrees.push_back(degreeJson.get<int>());
+    }
+
+    gen.chordLengthBeats = j.value("chordLengthBeats", 4.0);
+    gen.noteLengthBeats = j.value("noteLengthBeats", 1.0);
+    gen.passingToneProbability = j.value("passingToneProbability", 0.2f);
+    gen.velocity = j.value("velocity", 0.75f);
+    gen.gateFraction = j.value("gateFraction", 0.8f);
+    return gen;
+}
+
 PatternConfig ParsePattern(const json& j) {
     PatternConfig pattern;
     pattern.id = RequireField(j, "id", "pattern").get<std::string>();
@@ -222,6 +266,35 @@ PatternConfig ParsePattern(const json& j) {
             } catch (const std::exception& e) {
                 throw std::runtime_error("ConfigLoader: pattern '" + pattern.id +
                                           "' generatedRhythm for instrument '" + genConfig.instrument +
+                                          "': " + e.what());
+            }
+        }
+    }
+
+    if (j.contains("generatedChords")) {
+        for (const auto& genJson : j["generatedChords"]) {
+            GeneratedChordConfig genConfig = ParseGeneratedChord(genJson, pattern.id);
+            try {
+                std::vector<StepConfig> genSteps = GenerateChords(genConfig);
+                pattern.steps.insert(pattern.steps.end(), genSteps.begin(), genSteps.end());
+            } catch (const std::exception& e) {
+                throw std::runtime_error("ConfigLoader: pattern '" + pattern.id +
+                                          "' generatedChord for instrument '" + genConfig.instrument +
+                                          "': " + e.what());
+            }
+        }
+    }
+
+    if (j.contains("generatedBasslines")) {
+        for (const auto& genJson : j["generatedBasslines"]) {
+            GeneratedBasslineConfig genConfig = ParseGeneratedBassline(genJson, pattern.id);
+            try {
+                RandomSource rng(ReadSeed(genJson));
+                std::vector<StepConfig> genSteps = GenerateBassline(genConfig, rng);
+                pattern.steps.insert(pattern.steps.end(), genSteps.begin(), genSteps.end());
+            } catch (const std::exception& e) {
+                throw std::runtime_error("ConfigLoader: pattern '" + pattern.id +
+                                          "' generatedBassline for instrument '" + genConfig.instrument +
                                           "': " + e.what());
             }
         }

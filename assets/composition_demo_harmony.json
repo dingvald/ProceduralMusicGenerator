@@ -1,0 +1,130 @@
+{
+  "sampleRate": 48000,
+  "tempo": { "bpm": 96, "beatsPerBar": 4 },
+  "startPattern": "harmony_verse",
+  "loFi": { "bitDepth": 6, "holdFactor": 2 },
+  "instruments": [
+    {
+      "id": "pad",
+      "type": "synth",
+      "waveform": "square",
+      "dutyCycle": 0.5,
+      "gain": 0.16,
+      "pan": -0.4,
+      "envelope": { "attack": 0.03, "decay": 0.15, "sustain": 0.6, "release": 0.3 }
+    },
+    {
+      "id": "bass_synth",
+      "type": "synth",
+      "waveform": "triangle",
+      "gain": 0.4,
+      "pan": 0.0,
+      "envelope": { "attack": 0.005, "decay": 0.08, "sustain": 0.8, "release": 0.05 }
+    },
+    {
+      "id": "lead_synth",
+      "type": "synth",
+      "waveform": "square",
+      "dutyCycle": 0.25,
+      "gain": 0.3,
+      "pan": 0.5,
+      "envelope": { "attack": 0.01, "decay": 0.1, "sustain": 0.55, "release": 0.2 }
+    },
+    {
+      "id": "kick",
+      "type": "sample",
+      "file": "samples/kick.wav",
+      "gain": 0.9,
+      "pan": 0.0
+    },
+    {
+      "id": "hihat",
+      "type": "synth",
+      "waveform": "noise",
+      "gain": 0.25,
+      "pan": -0.6,
+      "envelope": { "attack": 0.001, "decay": 0.035, "sustain": 0.0, "release": 0.01 }
+    }
+  ],
+  "patterns": [
+    {
+      "id": "harmony_verse",
+      "lengthBars": 4,
+      "generatedChords": [
+        {
+          "instrument": "pad",
+          "key": "C",
+          "scale": "major",
+          "baseOctave": 4,
+          "degrees": [0, 5, 3, 4],
+          "chordLengthBeats": 4.0,
+          "seventh": false,
+          "velocity": 0.55,
+          "gateFraction": 0.85
+        }
+      ],
+      "generatedBasslines": [
+        {
+          "instrument": "bass_synth",
+          "key": "C",
+          "scale": "major",
+          "baseOctave": 2,
+          "degrees": [0, 5, 3, 4],
+          "chordLengthBeats": 4.0,
+          "noteLengthBeats": 1.0,
+          "passingToneProbability": 0.25,
+          "velocity": 0.8,
+          "gateFraction": 0.8,
+          "seed": 11
+        }
+      ],
+      "generatedMelodies": [
+        {
+          "instrument": "lead_synth",
+          "key": "C",
+          "scale": "majorPentatonic",
+          "baseOctave": 5,
+          "octaveRange": 1,
+          "lengthBeats": 16,
+          "noteLengthBeats": 0.5,
+          "restProbability": 0.3,
+          "gateFraction": 0.7,
+          "velocity": 0.7,
+          "seed": 5
+        }
+      ],
+      "generatedRhythms": [
+        {
+          "instrument": "kick",
+          "steps": 16,
+          "pulses": 5,
+          "lengthBeats": 16,
+          "velocity": 0.95,
+          "gate": 0.15
+        },
+        {
+          "instrument": "hihat",
+          "steps": 32,
+          "pulses": 21,
+          "lengthBeats": 16,
+          "note": "C",
+          "octave": 8,
+          "velocity": 0.35,
+          "velocityJitter": 0.1,
+          "gate": 0.05,
+          "seed": 3
+        }
+      ]
+    }
+  ],
+  "variationRules": [
+    {
+      "id": "mute_pad_occasionally",
+      "scope": "perBar",
+      "options": [
+        { "type": "setTrackMuted", "track": "pad", "muted": true, "weight": 0.15 },
+        { "type": "setTrackMuted", "track": "pad", "muted": false, "weight": 0.85 }
+      ]
+    }
+  ]
+}

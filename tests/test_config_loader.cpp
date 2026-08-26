@@ -412,6 +412,97 @@ TEST_CASE("ConfigLoader parses addLayer and removeLayer variation options") {
     CHECK(config.variationRules[0].options[1].targetId == "p2");
 }
 
+TEST_CASE("ConfigLoader defaults pan to 0.0 and parses an explicit pan for synth and sample instruments") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [
+        { "id": "syn", "type": "synth", "waveform": "square",
+          "envelope": { "attack": 0.01, "decay": 0.1, "sustain": 0.7, "release": 0.2 } },
+        { "id": "lead", "type": "synth", "waveform": "sine", "pan": -0.6,
+          "envelope": { "attack": 0.01, "decay": 0.1, "sustain": 0.7, "release": 0.2 } },
+        { "id": "snare", "type": "sample", "file": "samples/snare.wav", "pan": 0.8 }
+      ],
+      "patterns": [ { "id": "p1", "steps": [] } ]
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    REQUIRE(config.instruments.size() == 3);
+    CHECK(config.instruments[0].pan == doctest::Approx(0.0f)); // not set -> center
+    CHECK(config.instruments[1].pan == doctest::Approx(-0.6f));
+    CHECK(config.instruments[2].pan == doctest::Approx(0.8f));
+}
+
+TEST_CASE("ConfigLoader expands a generatedChords block into same-beat stacked-triad steps") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "generatedChords": [
+        { "instrument": "pad", "key": "C", "scale": "major", "degrees": [0, 3, 4, 0], "chordLengthBeats": 4.0 }
+      ] } ]
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    REQUIRE(config.patterns.size() == 1);
+    const std::vector<StepConfig>& steps = config.patterns[0].steps;
+    REQUIRE(steps.size() == 12); // 4 degrees * 3 tones (triad, seventh defaults to false)
+    for (const StepConfig& step : steps) {
+        CHECK(step.instrument == "pad");
+        CHECK(step.hasNote);
+    }
+}
+
+TEST_CASE("ConfigLoader expands a generatedBasslines block, reproducible via seed") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "generatedBasslines": [
+        { "instrument": "bass", "key": "C", "scale": "major", "degrees": [0, 3, 4, 0],
+          "chordLengthBeats": 4.0, "noteLengthBeats": 1.0, "seed": 42 }
+      ] } ]
+    }
+    )JSON";
+
+    CompositionConfig configA = ConfigLoader::LoadFromString(json);
+    CompositionConfig configB = ConfigLoader::LoadFromString(json);
+
+    REQUIRE(configA.patterns[0].steps.size() == 16); // 4 degrees * 4 slots/span
+    REQUIRE(configA.patterns[0].steps.size() == configB.patterns[0].steps.size());
+    for (size_t i = 0; i < configA.patterns[0].steps.size(); ++i) {
+        CHECK(configA.patterns[0].steps[i].note == configB.patterns[0].steps[i].note);
+        CHECK(configA.patterns[0].steps[i].instrument == "bass");
+    }
+}
+
+TEST_CASE("ConfigLoader throws when a generatedChord is missing 'degrees' or 'instrument'") {
+    const char* missingDegrees = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "generatedChords": [ { "instrument": "pad" } ] } ]
+    }
+    )JSON";
+    CHECK_THROWS_AS(ConfigLoader::LoadFromString(missingDegrees), std::runtime_error);
+
+    const char* missingInstrument = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "generatedChords": [ { "degrees": [0, 4] } ] } ]
+    }
+    )JSON";
+    CHECK_THROWS_AS(ConfigLoader::LoadFromString(missingInstrument), std::runtime_error);
+}
+
 TEST_CASE("ConfigLoader throws when an addLayer/removeLayer option is missing 'pattern'") {
     const char* missingPatternOnAdd = R"JSON(
     {
