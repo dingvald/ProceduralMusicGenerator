@@ -197,3 +197,122 @@ TEST_CASE("VariationEngine gate is boundary-inclusive at both gateMin and gateMa
     RandomSource rng2(1);
     CHECK(upperBound.Evaluate(0, "calm", rng2).size() == 1);
 }
+
+namespace {
+
+VariationRuleConfig MakeWeightScaledChoiceRule() {
+    VariationRuleConfig rule;
+    rule.id = "choice";
+
+    VariationOptionConfig stayCalm;
+    stayCalm.type = VariationOptionType::SwapPattern;
+    stayCalm.targetId = "calm";
+    stayCalm.weight = 1.0f; // unscaled -- stays fixed regardless of the parameter
+
+    VariationOptionConfig escalate;
+    escalate.type = VariationOptionType::SwapPattern;
+    escalate.targetId = "intense";
+    escalate.weight = 1.0f;
+    escalate.weightParameter = "danger";
+    escalate.paramAtWeightMin = 0.0f;
+    escalate.weightMultiplierAtMin = 0.1f; // rare at danger == 0
+    escalate.paramAtWeightMax = 1.0f;
+    escalate.weightMultiplierAtMax = 9.0f; // dominant at danger == 1
+
+    rule.options = {stayCalm, escalate};
+    return rule;
+}
+
+} // namespace
+
+TEST_CASE("VariationEngine weight scaling shifts selection frequency as the parameter changes") {
+    GameParameters params({GameParameterConfig{"danger", 0.0f}});
+    VariationEngine lowDanger({MakeWeightScaledChoiceRule()}, params);
+    RandomSource rngLow(7);
+
+    int trials = 20000;
+    int escalateCountLow = 0;
+    for (int i = 0; i < trials; ++i) {
+        auto decisions = lowDanger.Evaluate(0, "calm", rngLow);
+        REQUIRE(decisions.size() == 1);
+        if (decisions[0].targetId == "intense") {
+            ++escalateCountLow;
+        }
+    }
+    // weight 1.0 (stayCalm) vs weight 1.0*0.1 (escalate) -> expected freq 0.1/(1+0.1) ~= 0.0909
+    double freqLow = static_cast<double>(escalateCountLow) / trials;
+    CHECK(freqLow == doctest::Approx(0.1 / 1.1).epsilon(0.05));
+
+    params.Set("danger", 1.0f);
+    VariationEngine highDanger({MakeWeightScaledChoiceRule()}, params);
+    RandomSource rngHigh(7);
+    int escalateCountHigh = 0;
+    for (int i = 0; i < trials; ++i) {
+        auto decisions = highDanger.Evaluate(0, "calm", rngHigh);
+        REQUIRE(decisions.size() == 1);
+        if (decisions[0].targetId == "intense") {
+            ++escalateCountHigh;
+        }
+    }
+    // weight 1.0 vs weight 1.0*9.0 -> expected freq 9/(1+9) = 0.9
+    double freqHigh = static_cast<double>(escalateCountHigh) / trials;
+    CHECK(freqHigh == doctest::Approx(9.0 / 10.0).epsilon(0.05));
+
+    CHECK(freqHigh > freqLow);
+}
+
+TEST_CASE("VariationEngine weight scaling clamps the parameter outside [paramAtWeightMin, paramAtWeightMax]") {
+    GameParameters params({GameParameterConfig{"danger", -5.0f}}); // far below paramAtWeightMin
+    VariationEngine engine({MakeWeightScaledChoiceRule()}, params);
+    RandomSource rng(3);
+
+    int trials = 5000;
+    int escalateCount = 0;
+    for (int i = 0; i < trials; ++i) {
+        if (engine.Evaluate(0, "calm", rng)[0].targetId == "intense") {
+            ++escalateCount;
+        }
+    }
+    // Clamped to paramAtWeightMin's multiplier (0.1), same as danger == 0.0 exactly ->
+    // expected freq 0.1/(1+0.1) ~= 0.0909.
+    double freq = static_cast<double>(escalateCount) / trials;
+    CHECK(freq == doctest::Approx(0.1 / 1.1).epsilon(0.07));
+}
+
+TEST_CASE("VariationEngine weight scaling with an undeclared parameter reads as 0.0") {
+    GameParameters params({}); // "danger" never declared -> Get() always returns 0.0
+    VariationEngine engine({MakeWeightScaledChoiceRule()}, params);
+    RandomSource rng(3);
+
+    int trials = 5000;
+    int escalateCount = 0;
+    for (int i = 0; i < trials; ++i) {
+        if (engine.Evaluate(0, "calm", rng)[0].targetId == "intense") {
+            ++escalateCount;
+        }
+    }
+    // Same as danger == 0.0 exactly -> expected freq 0.1/(1+0.1) ~= 0.0909.
+    double freq = static_cast<double>(escalateCount) / trials;
+    CHECK(freq == doctest::Approx(0.1 / 1.1).epsilon(0.07));
+}
+
+TEST_CASE("VariationEngine weight scaling with an empty weightParameter leaves weight unscaled") {
+    VariationRuleConfig rule;
+    rule.id = "unscaled";
+    VariationOptionConfig option;
+    option.type = VariationOptionType::SwapPattern;
+    option.targetId = "pattern_b";
+    option.weight = 0.3f;
+    // weightParameter left empty -- weightMultiplierAtMin/Max must be ignored entirely.
+    option.weightMultiplierAtMin = 0.0f;
+    option.weightMultiplierAtMax = 0.0f;
+    rule.options = {option};
+
+    GameParameters params({});
+    VariationEngine engine({rule}, params);
+    RandomSource rng(1);
+
+    auto decisions = engine.Evaluate(0, "pattern_a", rng);
+    REQUIRE(decisions.size() == 1);
+    CHECK(decisions[0].targetId == "pattern_b");
+}

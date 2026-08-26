@@ -167,6 +167,22 @@ struct VariationOptionConfig {
     std::string targetId;   // pattern id (SwapPattern/AddLayer/RemoveLayer) or track id (SetTrackMuted)
     bool boolValue = false; // muted state (SetTrackMuted)
     float weight = 1.0f;
+
+    // Optional runtime-parameter weight scaling (see GameParameters): a
+    // softer alternative to VariationRuleConfig's hard gate -- rather than
+    // an option being all-in-scope or all-out, its effective weight ramps
+    // linearly between weightMultiplierAtMin and weightMultiplierAtMax as
+    // the named parameter moves across [paramAtWeightMin, paramAtWeightMax]
+    // (clamped outside that range), the same shape as GainCrossfadeConfig's
+    // mapping. effectiveWeight = weight * multiplier, so e.g. an "escalate"
+    // option can go from rare to near-certain as "danger" climbs instead of
+    // snapping on at one threshold. An empty weightParameter (the default)
+    // leaves weight unscaled -- exactly like before this field existed.
+    std::string weightParameter;
+    float paramAtWeightMin = 0.0f;
+    float weightMultiplierAtMin = 1.0f;
+    float paramAtWeightMax = 1.0f;
+    float weightMultiplierAtMax = 1.0f;
 };
 
 struct VariationRuleConfig {
@@ -189,11 +205,11 @@ struct VariationRuleConfig {
 };
 
 // A runtime parameter a host application (e.g. a game) can set live via
-// GameParameters::SetParameter, read by VariationRuleConfig's gate and by
+// GameParameters::Set, read by VariationRuleConfig's gate and by
 // GainCrossfadeConfig. Declaring the full set up front (rather than
-// discovering names ad hoc from SetParameter calls) is what lets
-// GameParameters stay a fixed set of atomics with no locking needed after
-// construction -- see GameParameters.h.
+// discovering names ad hoc from Set calls) is what lets GameParameters stay
+// a fixed set of atomics with no locking needed after construction -- see
+// GameParameters.h.
 struct GameParameterConfig {
     std::string name;
     float defaultValue = 0.0f;

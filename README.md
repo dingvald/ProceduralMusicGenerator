@@ -498,7 +498,9 @@ touch of atmosphere.
 ### Variation rule option types
 
 Each `"variationRules"` entry's `"options"` array is a weighted list; one option fires per rule
-per bar (see **Architecture notes** below for exactly when). `"type"` is one of:
+per bar (see **Architecture notes** below for exactly when). Any option's `"weight"` can also be
+scaled live by a `GameParameters` value via `"weightParameter"` — see **Runtime game parameters**
+below. `"type"` is one of:
 
 - `"swapPattern"` (+ `"pattern"`): replaces the one always-playing **base** pattern (see layering,
   below) with a different one.
@@ -596,7 +598,7 @@ bool declared = gameParameters.Has("danger");
 "drop unknown ids" convention); `Get` on one returns `0.0`. The declared parameter set is fixed at
 construction — see **Architecture notes** for why that's what makes `Set`/`Get` lock-free.
 
-Two things read a `GameParameters` value:
+Three things read a `GameParameters` value:
 
 - **A gated `"variationRules"` entry.** Add `"gateParameter"` (+ optional `"gateMin"`/`"gateMax"`,
   default an unbounded `-inf..inf`) to any rule; it's only in scope for that bar's evaluation while
@@ -610,7 +612,33 @@ Two things read a `GameParameters` value:
 
   A rule with no `"gateParameter"` (the default) is always in scope, exactly as before this field
   existed. Gating only affects `RuleBasedVariationStrategy`; `MarkovChainVariationStrategy` never
-  reads rule scope at all.
+  reads rule scope at all — this and the weight scaling below are both purely a `"variationRules"`
+  concept, not a variation-strategy one.
+- **A weight-scaled option inside a rule**, a softer alternative to the hard on/off gate above: add
+  `"weightParameter"` (+ `"paramAtWeightMin"`/`"weightMultiplierAtMin"`/`"paramAtWeightMax"`/
+  `"weightMultiplierAtMax"`) to any individual `"options"` entry, and its effective weight ramps
+  linearly between the two multipliers as the parameter crosses `[paramAtWeightMin,
+  paramAtWeightMax]` (clamped outside it, same mapping shape as `"gainCrossfades"` below) instead of
+  snapping in and out of scope at one threshold:
+
+  ```json
+  { "id": "choose_intensity", "scope": "perBar",
+    "options": [
+      { "type": "swapPattern", "pattern": "calm", "weight": 1.0 },
+      { "type": "swapPattern", "pattern": "intense", "weight": 1.0,
+        "weightParameter": "danger",
+        "paramAtWeightMin": 0.0, "weightMultiplierAtMin": 0.1,
+        "paramAtWeightMax": 1.0, "weightMultiplierAtMax": 9.0 }
+    ] }
+  ```
+
+  Here `"intense"` is picked about 1 time in 11 (`0.1 / (1.0 + 0.1)`) at `danger == 0.0` and about 9
+  times in 10 (`9.0 / (1.0 + 9.0)`) at `danger == 1.0` — a gradual escalation in *likelihood* rather
+  than a hard cutover. `weightMultiplierAtMin`/`weightMultiplierAtMax` both default to `1.0` (weight
+  unscaled), so an option with no `"weightParameter"` (the default) behaves exactly as before this
+  field existed; the effective weight is clamped to `>= 0`. A gate and weight scaling can be
+  combined freely — the gate decides whether a rule's options are considered at all that bar, weight
+  scaling then biases *which* option wins among them.
 - **A `"gainCrossfades"` entry**, smoothly ramping one instrument's Mixer track gain toward a
   target linearly derived from a parameter's value, instead of snapping to it:
 
@@ -630,10 +658,13 @@ Two things read a `GameParameters` value:
   live streaming playback, roughly every 5ms — see `main.cpp`'s control loop; every `RenderFrames`
   chunk during a `--render-wav` render).
 
-See `assets/composition_demo_adaptive.json` for a full worked example — a `"danger"` parameter
-gates a swap between a `calm` and an `intense` pattern and drives a `tension_pad` instrument's
-gain, runnable via `DemoApp composition_demo_adaptive.json --param danger=0.9 --render-wav
-danger.wav --seconds 16` (`--param name=value` sets a parameter's *initial* value up front — the
+See `assets/composition_demo_adaptive.json` for a worked example of the gate and the gain
+crossfade — a `"danger"` parameter gates a swap between a `calm` and an `intense` pattern and
+drives a `tension_pad` instrument's gain (weight scaling isn't in that file; it's tested purely
+statistically, the same way `RuleBasedVariationStrategy`'s underlying weighted-random choice always
+has been — see `tests/test_variation_engine.cpp`). Runnable via `DemoApp
+composition_demo_adaptive.json --param danger=0.9 --render-wav danger.wav --seconds 16`
+(`--param name=value` sets a parameter's *initial* value up front — the
 only way to give one a non-default starting value for a `--render-wav` run, since that mode never
 reaches the interactive input described next). When streaming instead of rendering, `DemoApp`
 itself doubles as a minimal host: it reads `<name> <value>` lines from stdin on their own thread
@@ -1157,6 +1188,14 @@ sibling (15%) or returning to either riff variant (15% each). Render it to a WAV
   `MarkovChainVariationStrategy` (which never reads `rulesInScope` at all, since it keys purely off
   `currentPatternId`) is entirely unaffected, exactly as intended: gating is a `"variationRules"`
   concept, not a variation-strategy concept.
+- **Weight scaling is applied the same way, for the same reason**: `VariationEngine::Evaluate`
+  clones each in-scope rule's options and rewrites `option.weight` in place (via `ApplyWeightScaling`)
+  before handing the context to the strategy, rather than teaching `RuleBasedVariationStrategy` about
+  `GameParameters` at all. `RandomSource::NextWeightedIndex` already treats a non-positive weight as
+  "never chosen" (falls back to always picking index `0` only when *every* weight is non-positive),
+  so `ApplyWeightScaling` only needs to clamp its result to `>= 0` for the value to read sensibly,
+  not to keep `NextWeightedIndex` itself safe. Gate filtering happens first, then scaling — a gated-out
+  rule's options are never even visited by `ApplyWeightScaling`.
 - **`GainCrossfader` ticks once per `Sequencer::Update()` call with a variable `deltaSeconds`, not
   once per audio sample**: unlike `Envelope`/`LoFiProcessor`/`DelayProcessor` (all audio-thread,
   fixed-sample-period components), gain crossfading is a control-thread concept — it only ever

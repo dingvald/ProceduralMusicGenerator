@@ -1,5 +1,6 @@
 #include "engine/VariationEngine.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "engine/RuleBasedVariationStrategy.h"
@@ -22,6 +23,31 @@ bool RuleGateSatisfied(const VariationRuleConfig& rule, const GameParameters& ga
     return value >= rule.gateMin && value <= rule.gateMax;
 }
 
+// An option with no weightParameter is returned unscaled (also what every
+// option looked like before weight scaling existed). Otherwise its weight
+// is multiplied by a factor that ramps linearly from weightMultiplierAtMin
+// to weightMultiplierAtMax as the named parameter crosses
+// [paramAtWeightMin, paramAtWeightMax], clamped outside that range -- the
+// same shape as GainCrossfadeConfig's mapping. Negative results are clamped
+// to 0 (RandomSource::NextWeightedIndex already treats a non-positive
+// weight as "never chosen", but a negative effective weight would be
+// confusing to reason about even though it's handled safely).
+VariationOptionConfig ApplyWeightScaling(VariationOptionConfig option, const GameParameters& gameParameters) {
+    if (option.weightParameter.empty()) {
+        return option;
+    }
+
+    float value = gameParameters.Get(option.weightParameter);
+    float range = option.paramAtWeightMax - option.paramAtWeightMin;
+    float t = range != 0.0f ? (value - option.paramAtWeightMin) / range
+                             : (value >= option.paramAtWeightMin ? 1.0f : 0.0f);
+    t = std::clamp(t, 0.0f, 1.0f);
+    float multiplier = option.weightMultiplierAtMin + t * (option.weightMultiplierAtMax - option.weightMultiplierAtMin);
+
+    option.weight = std::max(0.0f, option.weight * multiplier);
+    return option;
+}
+
 } // namespace
 
 VariationEngine::VariationEngine(std::vector<VariationRuleConfig> rules, const GameParameters& gameParameters,
@@ -36,9 +62,15 @@ std::vector<VariationDecision> VariationEngine::Evaluate(int barIndex, const std
     context.barIndex = barIndex;
     context.currentPatternId = currentPatternId;
     for (const VariationRuleConfig& rule : m_rules) {
-        if (RuleGateSatisfied(rule, m_gameParameters)) {
-            context.rulesInScope.push_back(rule);
+        if (!RuleGateSatisfied(rule, m_gameParameters)) {
+            continue;
         }
+
+        VariationRuleConfig scaledRule = rule;
+        for (VariationOptionConfig& option : scaledRule.options) {
+            option = ApplyWeightScaling(std::move(option), m_gameParameters);
+        }
+        context.rulesInScope.push_back(std::move(scaledRule));
     }
 
     return m_strategy->Decide(context, rng);

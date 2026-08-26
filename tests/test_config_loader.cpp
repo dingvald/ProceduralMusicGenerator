@@ -587,6 +587,45 @@ TEST_CASE("ConfigLoader parses a variation rule's gateParameter/gateMin/gateMax,
     CHECK(config.variationRules[1].gateMax > 1e30f);  // +infinity -> unbounded above
 }
 
+TEST_CASE("ConfigLoader parses a variation option's weight-scaling fields, defaulting to unscaled") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "steps": [] } ],
+      "variationRules": [
+        { "id": "r", "scope": "perBar",
+          "options": [
+            { "type": "noOp", "weight": 1.0,
+              "weightParameter": "danger",
+              "paramAtWeightMin": 0.0, "weightMultiplierAtMin": 0.1,
+              "paramAtWeightMax": 1.0, "weightMultiplierAtMax": 9.0 },
+            { "type": "noOp", "weight": 1.0 }
+          ] }
+      ]
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    REQUIRE(config.variationRules.size() == 1);
+    REQUIRE(config.variationRules[0].options.size() == 2);
+
+    const VariationOptionConfig& scaled = config.variationRules[0].options[0];
+    CHECK(scaled.weightParameter == "danger");
+    CHECK(scaled.paramAtWeightMin == doctest::Approx(0.0f));
+    CHECK(scaled.weightMultiplierAtMin == doctest::Approx(0.1f));
+    CHECK(scaled.paramAtWeightMax == doctest::Approx(1.0f));
+    CHECK(scaled.weightMultiplierAtMax == doctest::Approx(9.0f));
+
+    const VariationOptionConfig& unscaled = config.variationRules[0].options[1];
+    CHECK(unscaled.weightParameter.empty());
+    CHECK(unscaled.paramAtWeightMin == doctest::Approx(0.0f));  // defaults, unused since weightParameter is empty
+    CHECK(unscaled.weightMultiplierAtMin == doctest::Approx(1.0f));
+    CHECK(unscaled.paramAtWeightMax == doctest::Approx(1.0f));
+    CHECK(unscaled.weightMultiplierAtMax == doctest::Approx(1.0f));
+}
+
 TEST_CASE("ConfigLoader throws when an addLayer/removeLayer option is missing 'pattern'") {
     const char* missingPatternOnAdd = R"JSON(
     {

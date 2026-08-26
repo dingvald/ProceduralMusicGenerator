@@ -322,6 +322,12 @@ VariationOptionConfig ParseVariationOption(const json& j, const std::string& rul
         option.targetId = RequireField(j, "pattern", "removeLayer option in rule '" + ruleId + "'").get<std::string>();
     }
 
+    option.weightParameter = j.value("weightParameter", std::string());
+    option.paramAtWeightMin = j.value("paramAtWeightMin", 0.0f);
+    option.weightMultiplierAtMin = j.value("weightMultiplierAtMin", 1.0f);
+    option.paramAtWeightMax = j.value("paramAtWeightMax", 1.0f);
+    option.weightMultiplierAtMax = j.value("weightMultiplierAtMax", 1.0f);
+
     return option;
 }
 
