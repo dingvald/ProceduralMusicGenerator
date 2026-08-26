@@ -166,6 +166,28 @@ DemoApp composition_demo_generated.json --null-audio
 DemoApp composition_demo_textures.json --null-audio
 ```
 
+### Choosing an output mode: WAV render vs. live streaming
+
+`DemoApp` picks between the two modes below on one signal: whether `--render-wav <path>` is
+present on the command line.
+
+- **`--render-wav` given** → offline WAV render (next section). `AudioEngine::InitializeOffline()`
+  opens no device at all (real or null-backend), the composition is rendered as fast as the CPU
+  allows, and the process exits once the file is written. Only the *first* track path on the
+  command line is rendered — the playlist/hot-reload machinery below is a streaming-only concept
+  and is never reached in this mode. `--null-audio` has no effect here, since no device is opened
+  either way.
+- **`--render-wav` omitted** → live streaming playback (the following two sections).
+  `AudioEngine::Initialize()` opens a real playback device (or the null backend, if `--null-audio`
+  is given, for headless/CI runs), `Start()`s it, and `main` drives the sequencer forever from a
+  5ms polling loop, with the playlist/hot-reload logic layered on top.
+
+```
+DemoApp song.json --render-wav out.wav --seconds 20   # WAV render, exits when done
+DemoApp song.json                                      # live streaming, loops forever
+DemoApp song.json --null-audio                         # live streaming through the null backend
+```
+
 ### Rendering to a WAV file (no audio hardware required)
 
 `DemoApp` accepts `--render-wav <path>` (optionally with `--seconds <n>`, default `30`) to render
