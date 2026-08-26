@@ -5,6 +5,7 @@
 #include <iostream>
 #include <memory>
 #include <random>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
@@ -12,6 +13,7 @@
 
 #include "engine/AudioEngine.h"
 #include "engine/ConfigLoader.h"
+#include "engine/GameParameters.h"
 #include "engine/MarkovChainVariationStrategy.h"
 #include "engine/Mixer.h"
 #include "engine/Pattern.h"
@@ -194,6 +196,12 @@ int main(int argc, char** argv) {
     double renderSeconds = 30.0;
     double trackSeconds = 60.0; // how long each track streams before the playlist advances (only matters with >1 track)
     std::vector<std::string> trackPaths;
+    // Initial runtime-parameter values (--param name=value), applied once
+    // GameParameters exists and before anything reads from it -- the only
+    // way to give a parameter a non-default starting value for a
+    // --render-wav run, since that mode never reaches the interactive
+    // stdin reader below.
+    std::vector<std::pair<std::string, float>> initialParams;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--null-audio") {
@@ -204,6 +212,14 @@ int main(int argc, char** argv) {
             renderSeconds = std::stod(argv[++i]);
         } else if (arg == "--track-seconds" && i + 1 < argc) {
             trackSeconds = std::stod(argv[++i]);
+        } else if (arg == "--param" && i + 1 < argc) {
+            std::string assignment = argv[++i];
+            size_t eq = assignment.find('=');
+            if (eq != std::string::npos) {
+                initialParams.emplace_back(assignment.substr(0, eq), std::stof(assignment.substr(eq + 1)));
+            } else {
+                std::cerr << "Ignoring malformed --param '" << assignment << "' (expected name=value).\n";
+            }
         } else {
             trackPaths.push_back(arg);
         }
@@ -241,6 +257,22 @@ int main(int argc, char** argv) {
     RandomSource randomSource(std::random_device{}());
     auto logCallback = [](const std::string& message) { std::cout << message << "\n"; };
 
+    // Declared once from the first-loaded track and never rebuilt across a
+    // track switch (playlist advance or hot reload), matching how the
+    // device's sample rate/channel count are also fixed from the first
+    // track -- a host game's "danger"/"intensity" state shouldn't reset
+    // just because the underlying composition changed. A later track's own
+    // "gameParameters" declarations are therefore only consulted this once.
+    GameParameters gameParameters(firstTrack.config.gameParameters);
+    for (const auto& [name, value] : initialParams) {
+        if (!gameParameters.Has(name)) {
+            std::cerr << "--param '" << name << "' isn't declared in " << trackPaths[0]
+                       << "'s \"gameParameters\" -- ignoring.\n";
+            continue;
+        }
+        gameParameters.Set(name, value);
+    }
+
     LoadedTrack currentTrack;
     std::unique_ptr<VariationEngine> variationEngine;
     std::unique_ptr<Sequencer> sequencer;
@@ -268,10 +300,10 @@ int main(int argc, char** argv) {
         ApplyInstrumentDefs(mixer, defs);
 
         currentTrack = std::move(newTrack);
-        variationEngine = std::make_unique<VariationEngine>(currentTrack.config.variationRules,
-                                                              MakeVariationStrategy(currentTrack.config));
-        sequencer = std::make_unique<Sequencer>(audioEngine, *variationEngine, randomSource, currentTrack.config,
-                                                 currentTrack.patterns);
+        variationEngine = std::make_unique<VariationEngine>(
+            currentTrack.config.variationRules, gameParameters, MakeVariationStrategy(currentTrack.config));
+        sequencer = std::make_unique<Sequencer>(audioEngine, *variationEngine, randomSource, gameParameters,
+                                                 currentTrack.config, currentTrack.patterns);
         sequencer->SetVariationLogCallback(logCallback);
         audioEngine.Start();
         return true;
@@ -299,6 +331,40 @@ int main(int argc, char** argv) {
         std::cout << "Playing " << trackPaths[0] << ". Press Ctrl+C to stop.\n";
     }
     std::cout << "Edit and save any track's JSON file to hot-reload it live.\n";
+
+    // A minimal stand-in for a real game host: any thread can call
+    // GameParameters::Set at any time (see GameParameters.h), so this just
+    // reads "<name> <value>" lines from stdin on its own thread and calls
+    // it directly -- exactly the API contract a real embedding game would
+    // use, just typed by a human instead of computed from gameplay state.
+    // Detached (not joined) since this process only ever exits via Ctrl+C;
+    // harmless on a non-interactive stdin (piped/closed, e.g. under
+    // --null-audio in a smoke test) since std::getline just returns false
+    // immediately and the thread exits.
+    if (!firstTrack.config.gameParameters.empty()) {
+        std::cout << "Type '<parameter> <value>' + Enter to set a runtime parameter live (e.g. 'danger 0.8').\n";
+    }
+    std::thread paramInputThread([&gameParameters]() {
+        std::string line;
+        while (std::getline(std::cin, line)) {
+            std::istringstream iss(line);
+            std::string name;
+            float value;
+            if (!(iss >> name >> value)) {
+                if (!line.empty()) {
+                    std::cerr << "Malformed parameter input '" << line << "' (expected: <name> <value>).\n";
+                }
+                continue;
+            }
+            if (!gameParameters.Has(name)) {
+                std::cerr << "Unknown runtime parameter '" << name << "' -- ignoring.\n";
+                continue;
+            }
+            gameParameters.Set(name, value);
+            std::cout << "Set " << name << " = " << value << "\n";
+        }
+    });
+    paramInputThread.detach();
 
     size_t currentIndex = 0;
     std::filesystem::file_time_type currentMtime = SafeMtime(trackPaths[currentIndex]);

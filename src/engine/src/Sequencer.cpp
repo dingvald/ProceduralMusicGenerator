@@ -13,14 +13,26 @@ namespace pmg {
 Sequencer::Sequencer(AudioEngine& audioEngine,
                       VariationEngine& variationEngine,
                       RandomSource& randomSource,
+                      const GameParameters& gameParameters,
                       CompositionConfig config,
                       std::vector<Pattern> patterns)
     : m_audioEngine(audioEngine),
       m_variationEngine(variationEngine),
       m_randomSource(randomSource),
+      m_gameParameters(gameParameters),
       m_config(std::move(config)),
       m_patterns(std::move(patterns)),
-      m_activeLayers{PatternLayer{m_config.startPattern, 0, 0.0}} {}
+      m_activeLayers{PatternLayer{m_config.startPattern, 0, 0.0}} {
+    m_gainCrossfaders.reserve(m_config.gainCrossfades.size());
+    for (const GainCrossfadeConfig& crossfadeConfig : m_config.gainCrossfades) {
+        GainCrossfadeEntry entry;
+        entry.instrument = crossfadeConfig.instrument;
+        entry.parameter = crossfadeConfig.parameter;
+        entry.crossfader.Configure(crossfadeConfig);
+        m_gainCrossfaders.push_back(std::move(entry));
+    }
+    m_lastGainUpdateFrames = m_audioEngine.GetFramesProcessed();
+}
 
 void Sequencer::SetVariationLogCallback(VariationLogCallback callback) {
     m_logCallback = std::move(callback);
@@ -166,6 +178,27 @@ void Sequencer::UpdateLayer(PatternLayer& layer, double currentGlobalBeat, int b
     }
 }
 
+void Sequencer::UpdateGainCrossfades(uint64_t frames) {
+    if (m_gainCrossfaders.empty()) {
+        return;
+    }
+
+    uint64_t deltaFrames = frames > m_lastGainUpdateFrames ? frames - m_lastGainUpdateFrames : 0;
+    double deltaSeconds = static_cast<double>(deltaFrames) / static_cast<double>(m_audioEngine.GetSampleRate());
+    m_lastGainUpdateFrames = frames;
+
+    for (GainCrossfadeEntry& entry : m_gainCrossfaders) {
+        float parameterValue = m_gameParameters.Get(entry.parameter);
+        float gain = entry.crossfader.NextGain(parameterValue, deltaSeconds);
+
+        Command command;
+        command.type = CommandType::SetTrackGain;
+        command.id = FixedId(entry.instrument);
+        command.floatValue = gain;
+        m_audioEngine.GetParameterBus().Push(command);
+    }
+}
+
 void Sequencer::Update() {
     uint64_t frames = m_audioEngine.GetFramesProcessed();
     double currentGlobalBeat = FramesToBeats(frames);
@@ -185,6 +218,8 @@ void Sequencer::Update() {
     for (PatternLayer& layer : m_activeLayers) {
         UpdateLayer(layer, currentGlobalBeat, beatsPerBar);
     }
+
+    UpdateGainCrossfades(frames);
 }
 
 } // namespace pmg

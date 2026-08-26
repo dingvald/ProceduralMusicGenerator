@@ -57,6 +57,13 @@ A procedural/generative music engine written in modern C++. It supports:
   track always has), and watches every currently-playing track's file for changes, live-reloading
   it — new instruments, patterns, and variation rules — without restarting the process or dropping
   the audio device.
+- **Runtime game parameters** — a host application (e.g. a game) can declare named float
+  parameters (`"gameParameters"`, e.g. `"danger"`) and set them live via a thread-safe
+  `GameParameters::Set("danger", 0.8f)` C++ call from its own thread. A `VariationRuleConfig` can
+  gate itself on one of these (only in scope while the parameter is within a configured range —
+  e.g. only swap to a more intense pattern once `"danger" >= 0.6`), and `"gainCrossfades"` can
+  smoothly ramp an instrument's Mixer track gain toward a target derived from a parameter (e.g. a
+  tension pad fading in as danger rises), reusing `Mixer::SetTrackGain`'s existing plumbing.
 
 Built with [premake5](https://premake.github.io/); targets Windows via Visual Studio 2026 for
 this pass (see **Build** below for the current premake action caveat).
@@ -227,11 +234,14 @@ losing the audio device. A save that produces invalid JSON (or references a miss
 reported to stderr and ignored, leaving whatever was already playing untouched, rather than
 crashing or going silent; it's retried automatically the next time the file changes again.
 
-Two things don't change across a track switch (playlist advance or hot reload) because the audio
-device is only ever opened once, at startup, from the first track loaded: the device's sample rate
-and channel count. A later track's own `"sampleRate"` field is ignored in favor of whatever the
-device actually opened at — sample instruments are decoded at that rate regardless of what the
-track's JSON asks for.
+Three things don't change across a track switch (playlist advance or hot reload) because they're
+only ever built once, from the first track loaded: the audio device's sample rate and channel
+count, and the `GameParameters` instance (see **Runtime game parameters** below) — a host game's
+"danger"/"intensity" state shouldn't reset just because the underlying composition changed. A
+later track's own `"sampleRate"` and `"gameParameters"` fields are ignored in favor of whatever the
+first track already established — sample instruments are decoded at the device's actual rate
+regardless of what the track's JSON asks for, and a later track can't declare a new parameter name
+that wasn't already known at startup.
 
 ### Running the tests
 
@@ -555,6 +565,80 @@ compositions):
 
 Both fields are independent and can be used alone or together. Omitting `"loFi"` entirely leaves
 output unquantized, matching pre-`LoFiProcessor` behavior.
+
+### Runtime game parameters
+
+A composition can declare named float parameters a *host application* — a game embedding/linking
+this engine, not the JSON itself — sets live at runtime, independent of anything scripted in the
+composition:
+
+```json
+"gameParameters": [
+  { "name": "danger", "default": 0.0 },
+  { "name": "intensity" }
+]
+```
+
+`"name"` is required and is the string a game refers to it by; `"default"` (default `0.0`) is its
+starting value before the game ever calls `Set`. `ConfigLoader` turns this into a
+`std::vector<GameParameterConfig>` that `main.cpp` uses to construct one `GameParameters` instance
+— a thread-safe `map<string, float>` (see `src/engine/include/engine/GameParameters.h`):
+
+```cpp
+GameParameters gameParameters(config.gameParameters);
+...
+gameParameters.Set("danger", 0.8f);   // callable from any thread, any time
+float d = gameParameters.Get("danger");
+bool declared = gameParameters.Has("danger");
+```
+
+`Set` on an undeclared name is a silent no-op (matching `Mixer::NoteOn`/`TriggerSample`'s existing
+"drop unknown ids" convention); `Get` on one returns `0.0`. The declared parameter set is fixed at
+construction — see **Architecture notes** for why that's what makes `Set`/`Get` lock-free.
+
+Two things read a `GameParameters` value:
+
+- **A gated `"variationRules"` entry.** Add `"gateParameter"` (+ optional `"gateMin"`/`"gateMax"`,
+  default an unbounded `-inf..inf`) to any rule; it's only in scope for that bar's evaluation while
+  the named parameter's current value falls within `[gateMin, gateMax]` (inclusive):
+
+  ```json
+  { "id": "escalate_when_dangerous", "scope": "perBar",
+    "gateParameter": "danger", "gateMin": 0.6, "gateMax": 1.0,
+    "options": [ { "type": "swapPattern", "pattern": "intense", "weight": 1.0 } ] }
+  ```
+
+  A rule with no `"gateParameter"` (the default) is always in scope, exactly as before this field
+  existed. Gating only affects `RuleBasedVariationStrategy`; `MarkovChainVariationStrategy` never
+  reads rule scope at all.
+- **A `"gainCrossfades"` entry**, smoothly ramping one instrument's Mixer track gain toward a
+  target linearly derived from a parameter's value, instead of snapping to it:
+
+  ```json
+  "gainCrossfades": [
+    { "instrument": "tension_pad", "parameter": "danger",
+      "paramAtGainMin": 0.0, "gainAtMin": 0.0,
+      "paramAtGainMax": 1.0, "gainAtMax": 0.7,
+      "smoothingSeconds": 2.0 }
+  ]
+  ```
+
+  The parameter/gain mapping is linear and clamped outside `[paramAtGainMin, paramAtGainMax]`
+  (defaults `0.0`/`1.0`); it need not match the parameter's own declared range. `"smoothingSeconds"`
+  (default `0.5`) is the time to cross the *full* `gainAtMin..gainAtMax` span at a constant rate —
+  `<= 0` snaps to the target instantly instead. Ticked once per `Sequencer::Update()` call (so on
+  live streaming playback, roughly every 5ms — see `main.cpp`'s control loop; every `RenderFrames`
+  chunk during a `--render-wav` render).
+
+See `assets/composition_demo_adaptive.json` for a full worked example — a `"danger"` parameter
+gates a swap between a `calm` and an `intense` pattern and drives a `tension_pad` instrument's
+gain, runnable via `DemoApp composition_demo_adaptive.json --param danger=0.9 --render-wav
+danger.wav --seconds 16` (`--param name=value` sets a parameter's *initial* value up front — the
+only way to give one a non-default starting value for a `--render-wav` run, since that mode never
+reaches the interactive input described next). When streaming instead of rendering, `DemoApp`
+itself doubles as a minimal host: it reads `<name> <value>` lines from stdin on their own thread
+and calls `GameParameters::Set` directly, so typing `danger 0.8` + Enter while it's running sets
+that parameter live, exactly like a real embedding game would from its own gameplay-state thread.
 
 ### Full worked example: every feature in one composition
 
@@ -1052,3 +1136,43 @@ sibling (15%) or returning to either riff variant (15% each). Render it to a WAV
   retried every single poll — once a given mtime has failed to load, it's not retried again until
   the file changes (gets a new mtime) once more, so fixing a typo and re-saving is what triggers the
   next attempt rather than a 1-second retry spam.
+- **`GameParameters` is lock-free by fixing its key set at construction, not by avoiding a map**:
+  its `std::unordered_map<std::string, std::atomic<float>>` is built once, from
+  `CompositionConfig::gameParameters`, entirely before any `Set`/`Get` call can happen (`main.cpp`
+  constructs it right after loading the first track, before any thread — including the stdin
+  reader thread below — is spun up). Because the map's *keys* never change after that, every
+  later `Set`/`Get` only ever touches an existing `std::atomic<float>` value in place (relaxed
+  load/store; no ordering constraint on other engine state is needed), which needs no mutex despite
+  running the store from an arbitrary host thread and the load from the control thread. This is a
+  deliberately narrower guarantee than a general concurrent map: `Set` on a name that was never
+  declared is a silent no-op (matching `Mixer::NoteOn`/`TriggerSample`'s existing "drop unknown ids"
+  convention) rather than inserting a new key, since that's exactly the operation this design can't
+  make safe without a lock.
+- **The parameter gate is filtered centrally in `VariationEngine::Evaluate`, not inside each
+  strategy**: `VariationContext::rulesInScope` used to just be `m_rules` unconditionally (the class
+  comment literally said "`scope` field reserved for future filtering"); gating now builds it by
+  keeping only the rules whose `RuleGateSatisfied` check passes before handing the context to
+  `IVariationStrategy::Decide`. This keeps `RuleBasedVariationStrategy` itself completely unaware
+  gating exists — it still just picks a weighted option from whatever's in scope — and
+  `MarkovChainVariationStrategy` (which never reads `rulesInScope` at all, since it keys purely off
+  `currentPatternId`) is entirely unaffected, exactly as intended: gating is a `"variationRules"`
+  concept, not a variation-strategy concept.
+- **`GainCrossfader` ticks once per `Sequencer::Update()` call with a variable `deltaSeconds`, not
+  once per audio sample**: unlike `Envelope`/`LoFiProcessor`/`DelayProcessor` (all audio-thread,
+  fixed-sample-period components), gain crossfading is a control-thread concept — it only ever
+  produces `SetTrackGain` `Command`s onto `ParameterBus`, the same way `Sequencer::FireStep`
+  already produces `NoteOn`/`TriggerSample` ones. `Sequencer::UpdateGainCrossfades` derives
+  `deltaSeconds` from the delta in `AudioEngine::GetFramesProcessed()` since its last tick (not a
+  wall-clock timer), for the same reason `FramesToBeats` does: it stays correct whether ticks are
+  paced to real time (live streaming, ~5ms apart) or run as fast as the CPU allows (a
+  `--render-wav` render, one tick per 256-frame chunk) — a wall-clock-timed ramp would render
+  wrong (either instant or absent) in the offline case. The very first `NextGain` call on a fresh
+  `GainCrossfader` jumps straight to its target instead of ramping from an arbitrary starting gain,
+  so a track doesn't audibly fade in from silence just because gain crossfading started tracking
+  it; only *changes* to the parameter after that ramp smoothly.
+- **`Mixer::SetTrackGain` was already fully wired end-to-end and simply had no caller**: the
+  `CommandType::SetTrackGain` case in `AudioEngine::RenderFrames` and `Mixer::SetTrackGain` itself
+  both predate this feature — `GainCrossfader`/`Sequencer::UpdateGainCrossfades` are the first code
+  to actually construct and push one of these commands. No `ParameterBus`, `AudioEngine`, or
+  `Mixer` changes were needed to add gain crossfading; only `Sequencer` (the producer) and
+  `CompositionConfig`/`ConfigLoader` (the declarative surface) had to change.

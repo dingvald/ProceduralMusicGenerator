@@ -1,6 +1,7 @@
 #include "engine/ConfigLoader.h"
 
 #include <fstream>
+#include <limits>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -333,7 +334,31 @@ VariationRuleConfig ParseVariationRule(const json& j) {
     for (const auto& optJson : options) {
         rule.options.push_back(ParseVariationOption(optJson, rule.id));
     }
+
+    rule.gateParameter = j.value("gateParameter", std::string());
+    rule.gateMin = j.value("gateMin", -std::numeric_limits<float>::infinity());
+    rule.gateMax = j.value("gateMax", std::numeric_limits<float>::infinity());
+
     return rule;
+}
+
+GameParameterConfig ParseGameParameter(const json& j) {
+    GameParameterConfig param;
+    param.name = RequireField(j, "name", "gameParameters entry").get<std::string>();
+    param.defaultValue = j.value("default", 0.0f);
+    return param;
+}
+
+GainCrossfadeConfig ParseGainCrossfade(const json& j) {
+    GainCrossfadeConfig crossfade;
+    crossfade.instrument = RequireField(j, "instrument", "gainCrossfades entry").get<std::string>();
+    crossfade.parameter = RequireField(j, "parameter", "gainCrossfades entry").get<std::string>();
+    crossfade.paramAtGainMin = j.value("paramAtGainMin", 0.0f);
+    crossfade.gainAtMin = j.value("gainAtMin", 0.0f);
+    crossfade.paramAtGainMax = j.value("paramAtGainMax", 1.0f);
+    crossfade.gainAtMax = j.value("gainAtMax", 1.0f);
+    crossfade.smoothingSeconds = j.value("smoothingSeconds", 0.5f);
+    return crossfade;
 }
 
 MarkovChainConfig ParseMarkovChain(const json& j) {
@@ -411,6 +436,18 @@ CompositionConfig ConfigLoader::LoadFromString(const std::string& jsonText) {
         config.delay.delayTimeSeconds = delay.value("delayTimeSeconds", 0.0f);
         config.delay.feedback = delay.value("feedback", 0.0f);
         config.delay.mix = delay.value("mix", 0.0f);
+    }
+
+    if (root.contains("gameParameters")) {
+        for (const auto& paramJson : root["gameParameters"]) {
+            config.gameParameters.push_back(ParseGameParameter(paramJson));
+        }
+    }
+
+    if (root.contains("gainCrossfades")) {
+        for (const auto& crossfadeJson : root["gainCrossfades"]) {
+            config.gainCrossfades.push_back(ParseGainCrossfade(crossfadeJson));
+        }
     }
 
     return config;

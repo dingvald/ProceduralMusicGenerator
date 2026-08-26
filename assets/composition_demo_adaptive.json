@@ -1,0 +1,122 @@
+{
+  "sampleRate": 48000,
+  "tempo": { "bpm": 128, "beatsPerBar": 4 },
+  "startPattern": "calm",
+  "loFi": { "bitDepth": 5, "holdFactor": 2 },
+  "gameParameters": [
+    { "name": "danger", "default": 0.0 }
+  ],
+  "instruments": [
+    {
+      "id": "kick",
+      "type": "sample",
+      "file": "samples/kick.wav",
+      "gain": 0.9
+    },
+    {
+      "id": "hihat",
+      "type": "synth",
+      "waveform": "noise",
+      "gain": 0.25,
+      "envelope": { "attack": 0.001, "decay": 0.03, "sustain": 0.0, "release": 0.01 }
+    },
+    {
+      "id": "lead_synth",
+      "type": "synth",
+      "waveform": "square",
+      "dutyCycle": 0.25,
+      "gain": 0.32,
+      "envelope": { "attack": 0.01, "decay": 0.1, "sustain": 0.55, "release": 0.15 }
+    },
+    {
+      "id": "tension_pad",
+      "type": "synth",
+      "waveform": "square",
+      "dutyCycle": 0.5,
+      "gain": 1.0,
+      "pan": -0.2,
+      "envelope": { "attack": 0.3, "decay": 0.2, "sustain": 0.9, "release": 0.5 }
+    }
+  ],
+  "patterns": [
+    {
+      "id": "calm",
+      "lengthBars": 2,
+      "steps": [
+        { "beat": 0.0, "instrument": "kick", "velocity": 0.9 },
+        { "beat": 4.0, "instrument": "kick", "velocity": 0.9 },
+        { "beat": 0.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.4 },
+        { "beat": 2.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.3 },
+        { "beat": 4.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.4 },
+        { "beat": 6.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.3 },
+        { "beat": 0.0, "instrument": "lead_synth", "note": "C", "octave": 4, "velocity": 0.6, "gate": 1.5 },
+        { "beat": 4.0, "instrument": "lead_synth", "note": "G", "octave": 3, "velocity": 0.5, "gate": 1.5 },
+        { "beat": 0.0, "instrument": "tension_pad", "note": "C", "octave": 3, "velocity": 0.5, "gate": 8.0 }
+      ]
+    },
+    {
+      "id": "intense",
+      "lengthBars": 2,
+      "steps": [
+        { "beat": 0.0, "instrument": "kick", "velocity": 1.0 },
+        { "beat": 1.0, "instrument": "kick", "velocity": 0.8 },
+        { "beat": 2.0, "instrument": "kick", "velocity": 1.0 },
+        { "beat": 3.0, "instrument": "kick", "velocity": 0.8 },
+        { "beat": 4.0, "instrument": "kick", "velocity": 1.0 },
+        { "beat": 5.0, "instrument": "kick", "velocity": 0.8 },
+        { "beat": 6.0, "instrument": "kick", "velocity": 1.0 },
+        { "beat": 7.0, "instrument": "kick", "velocity": 0.8 },
+        { "beat": 0.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.45 },
+        { "beat": 0.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.35 },
+        { "beat": 1.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.45 },
+        { "beat": 1.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.35 },
+        { "beat": 2.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.45 },
+        { "beat": 2.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.35 },
+        { "beat": 3.0, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.45 },
+        { "beat": 3.5, "instrument": "hihat", "note": "C", "octave": 8, "velocity": 0.35 },
+        { "beat": 0.0, "instrument": "lead_synth", "note": "C", "octave": 5, "velocity": 0.85, "gate": 0.3 },
+        { "beat": 0.5, "instrument": "lead_synth", "note": "D#", "octave": 5, "velocity": 0.8, "gate": 0.3 },
+        { "beat": 1.0, "instrument": "lead_synth", "note": "F", "octave": 5, "velocity": 0.85, "gate": 0.3 },
+        { "beat": 1.5, "instrument": "lead_synth", "note": "D#", "octave": 5, "velocity": 0.8, "gate": 0.3 },
+        { "beat": 2.0, "instrument": "lead_synth", "note": "G", "octave": 5, "velocity": 0.9, "gate": 0.3 },
+        { "beat": 2.5, "instrument": "lead_synth", "note": "F", "octave": 5, "velocity": 0.85, "gate": 0.3 },
+        { "beat": 3.0, "instrument": "lead_synth", "note": "D#", "octave": 5, "velocity": 0.8, "gate": 0.3 },
+        { "beat": 3.5, "instrument": "lead_synth", "note": "C", "octave": 5, "velocity": 0.85, "gate": 0.3 },
+        { "beat": 0.0, "instrument": "tension_pad", "note": "C", "octave": 3, "velocity": 0.6, "gate": 8.0 }
+      ]
+    }
+  ],
+  "variationRules": [
+    {
+      "id": "escalate_when_dangerous",
+      "scope": "perBar",
+      "gateParameter": "danger",
+      "gateMin": 0.6,
+      "gateMax": 1.0,
+      "options": [
+        { "type": "swapPattern", "pattern": "intense", "weight": 1.0 }
+      ]
+    },
+    {
+      "id": "deescalate_when_safe",
+      "scope": "perBar",
+      "gateParameter": "danger",
+      "gateMin": -1.0,
+      "gateMax": 0.4,
+      "options": [
+        { "type": "swapPattern", "pattern": "calm", "weight": 1.0 }
+      ]
+    }
+  ],
+  "gainCrossfades": [
+    {
+      "instrument": "tension_pad",
+      "parameter": "danger",
+      "paramAtGainMin": 0.0,
+      "gainAtMin": 0.0,
+      "paramAtGainMax": 1.0,
+      "gainAtMax": 0.7,
+      "smoothingSeconds": 2.0
+    }
+  ]
+}

@@ -3,7 +3,9 @@
 #include <vector>
 
 #include "doctest/doctest.h"
+#include "engine/GameParameters.h"
 #include "engine/RuleBasedVariationStrategy.h"
+#include "engine/VariationEngine.h"
 
 using namespace pmg;
 
@@ -130,4 +132,68 @@ TEST_CASE("RuleBasedVariationStrategy maps each option type to its own distinct 
     CHECK(decisions[2].targetId == "harmony_layer");
     CHECK(decisions[3].type == VariationDecision::Type::RemoveLayer);
     CHECK(decisions[3].targetId == "harmony_layer");
+}
+
+namespace {
+
+VariationRuleConfig MakeGatedSwapRule(const std::string& gateParameter, float gateMin, float gateMax) {
+    VariationRuleConfig rule;
+    rule.id = "gated";
+    rule.gateParameter = gateParameter;
+    rule.gateMin = gateMin;
+    rule.gateMax = gateMax;
+
+    VariationOptionConfig option;
+    option.type = VariationOptionType::SwapPattern;
+    option.targetId = "intense";
+    option.weight = 1.0f;
+    rule.options = {option};
+    return rule;
+}
+
+} // namespace
+
+TEST_CASE("VariationEngine excludes a gated rule when its parameter is outside [gateMin, gateMax]") {
+    GameParameters params({GameParameterConfig{"danger", 0.0f}});
+    VariationEngine engine({MakeGatedSwapRule("danger", 0.5f, 1.0f)}, params);
+
+    RandomSource rng(1);
+    std::vector<VariationDecision> decisions = engine.Evaluate(0, "calm", rng);
+    CHECK(decisions.empty());
+}
+
+TEST_CASE("VariationEngine includes a gated rule once its parameter enters [gateMin, gateMax]") {
+    GameParameters params({GameParameterConfig{"danger", 0.0f}});
+    VariationEngine engine({MakeGatedSwapRule("danger", 0.5f, 1.0f)}, params);
+
+    params.Set("danger", 0.75f);
+    RandomSource rng(1);
+    std::vector<VariationDecision> decisions = engine.Evaluate(0, "calm", rng);
+
+    REQUIRE(decisions.size() == 1);
+    CHECK(decisions[0].type == VariationDecision::Type::SwapPattern);
+    CHECK(decisions[0].targetId == "intense");
+}
+
+TEST_CASE("VariationEngine treats an ungated rule (empty gateParameter) as always in scope") {
+    GameParameters params({});
+    VariationEngine engine({MakeGatedSwapRule("", 0.5f, 1.0f)}, params);
+
+    RandomSource rng(1);
+    std::vector<VariationDecision> decisions = engine.Evaluate(0, "calm", rng);
+
+    REQUIRE(decisions.size() == 1);
+    CHECK(decisions[0].targetId == "intense");
+}
+
+TEST_CASE("VariationEngine gate is boundary-inclusive at both gateMin and gateMax") {
+    GameParameters params({GameParameterConfig{"danger", 0.5f}});
+    VariationEngine lowerBound({MakeGatedSwapRule("danger", 0.5f, 1.0f)}, params);
+    RandomSource rng1(1);
+    CHECK(lowerBound.Evaluate(0, "calm", rng1).size() == 1);
+
+    params.Set("danger", 1.0f);
+    VariationEngine upperBound({MakeGatedSwapRule("danger", 0.5f, 1.0f)}, params);
+    RandomSource rng2(1);
+    CHECK(upperBound.Evaluate(0, "calm", rng2).size() == 1);
 }

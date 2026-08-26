@@ -6,6 +6,8 @@
 #include <vector>
 
 #include "engine/CompositionConfig.h"
+#include "engine/GainCrossfader.h"
+#include "engine/GameParameters.h"
 #include "engine/Pattern.h"
 #include "engine/RandomSource.h"
 
@@ -27,6 +29,15 @@ struct PatternLayer {
     double patternStartBeat = 0.0; // global beat at which this layer's current cycle began
 };
 
+// One resolved GainCrossfadeConfig entry: the instrument/parameter names
+// pulled out where Sequencer can read them each tick, alongside the
+// stateful GainCrossfader itself.
+struct GainCrossfadeEntry {
+    std::string instrument;
+    std::string parameter;
+    GainCrossfader crossfader;
+};
+
 // Control-thread clock driver. Converts AudioEngine::GetFramesProcessed()
 // into elapsed beats (avoids wall-clock drift vs. a wall-clock timer), walks
 // each active PatternLayer's steps, and pushes NoteOn/TriggerSample commands
@@ -42,9 +53,12 @@ class Sequencer {
 public:
     using VariationLogCallback = std::function<void(const std::string&)>;
 
+    // gameParameters must outlive this Sequencer; read once per Update()
+    // tick to drive any configured GainCrossfaders (config.gainCrossfades).
     Sequencer(AudioEngine& audioEngine,
               VariationEngine& variationEngine,
               RandomSource& randomSource,
+              const GameParameters& gameParameters,
               CompositionConfig config,
               std::vector<Pattern> patterns);
 
@@ -59,16 +73,22 @@ private:
     void FireStep(const ResolvedStep& step);
     void EvaluateVariationForBar(int barIndex, double currentGlobalBeat);
     void UpdateLayer(PatternLayer& layer, double currentGlobalBeat, int beatsPerBar);
+    void UpdateGainCrossfades(uint64_t frames);
 
     AudioEngine& m_audioEngine;
     VariationEngine& m_variationEngine;
     RandomSource& m_randomSource;
+    const GameParameters& m_gameParameters;
     CompositionConfig m_config;
     std::vector<Pattern> m_patterns;
 
     std::vector<PatternLayer> m_activeLayers;
     int m_currentBar = -1;
     VariationLogCallback m_logCallback;
+
+    // One entry per config.gainCrossfades entry, in the same order.
+    std::vector<GainCrossfadeEntry> m_gainCrossfaders;
+    uint64_t m_lastGainUpdateFrames = 0;
 };
 
 } // namespace pmg

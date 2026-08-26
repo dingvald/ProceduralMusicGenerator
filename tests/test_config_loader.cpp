@@ -503,6 +503,90 @@ TEST_CASE("ConfigLoader throws when a generatedChord is missing 'degrees' or 'in
     CHECK_THROWS_AS(ConfigLoader::LoadFromString(missingInstrument), std::runtime_error);
 }
 
+TEST_CASE("ConfigLoader parses gameParameters with and without an explicit default") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "steps": [] } ],
+      "gameParameters": [
+        { "name": "danger", "default": 0.25 },
+        { "name": "intensity" }
+      ]
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    REQUIRE(config.gameParameters.size() == 2);
+    CHECK(config.gameParameters[0].name == "danger");
+    CHECK(config.gameParameters[0].defaultValue == doctest::Approx(0.25f));
+    CHECK(config.gameParameters[1].name == "intensity");
+    CHECK(config.gameParameters[1].defaultValue == doctest::Approx(0.0f)); // not set -> default
+}
+
+TEST_CASE("ConfigLoader parses gainCrossfades with defaults") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "steps": [] } ],
+      "gainCrossfades": [
+        { "instrument": "pad", "parameter": "danger", "gainAtMax": 0.8, "smoothingSeconds": 1.5 }
+      ]
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    REQUIRE(config.gainCrossfades.size() == 1);
+    CHECK(config.gainCrossfades[0].instrument == "pad");
+    CHECK(config.gainCrossfades[0].parameter == "danger");
+    CHECK(config.gainCrossfades[0].paramAtGainMin == doctest::Approx(0.0f)); // not set -> default
+    CHECK(config.gainCrossfades[0].gainAtMin == doctest::Approx(0.0f));
+    CHECK(config.gainCrossfades[0].paramAtGainMax == doctest::Approx(1.0f));
+    CHECK(config.gainCrossfades[0].gainAtMax == doctest::Approx(0.8f));
+    CHECK(config.gainCrossfades[0].smoothingSeconds == doctest::Approx(1.5f));
+}
+
+TEST_CASE("ConfigLoader throws when a gainCrossfades entry is missing 'instrument' or 'parameter'") {
+    const char* missingParameter = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "steps": [] } ],
+      "gainCrossfades": [ { "instrument": "pad" } ]
+    }
+    )JSON";
+    CHECK_THROWS_AS(ConfigLoader::LoadFromString(missingParameter), std::runtime_error);
+}
+
+TEST_CASE("ConfigLoader parses a variation rule's gateParameter/gateMin/gateMax, defaulting to an unbounded gate") {
+    const char* json = R"JSON(
+    {
+      "tempo": { "bpm": 100, "beatsPerBar": 4 },
+      "startPattern": "p1",
+      "instruments": [],
+      "patterns": [ { "id": "p1", "steps": [] } ],
+      "variationRules": [
+        { "id": "gated", "scope": "perBar", "gateParameter": "danger", "gateMin": 0.5, "gateMax": 1.0,
+          "options": [ { "type": "noOp", "weight": 1.0 } ] },
+        { "id": "ungated", "scope": "perBar", "options": [ { "type": "noOp", "weight": 1.0 } ] }
+      ]
+    }
+    )JSON";
+
+    CompositionConfig config = ConfigLoader::LoadFromString(json);
+    REQUIRE(config.variationRules.size() == 2);
+    CHECK(config.variationRules[0].gateParameter == "danger");
+    CHECK(config.variationRules[0].gateMin == doctest::Approx(0.5f));
+    CHECK(config.variationRules[0].gateMax == doctest::Approx(1.0f));
+    CHECK(config.variationRules[1].gateParameter.empty());
+    CHECK(config.variationRules[1].gateMin < -1e30f); // -infinity -> unbounded below
+    CHECK(config.variationRules[1].gateMax > 1e30f);  // +infinity -> unbounded above
+}
+
 TEST_CASE("ConfigLoader throws when an addLayer/removeLayer option is missing 'pattern'") {
     const char* missingPatternOnAdd = R"JSON(
     {
